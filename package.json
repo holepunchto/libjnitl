@@ -1,0 +1,17 @@
+{
+  "private": true,
+  "name": "libjnitl",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/holepunchto/libjnitl.git"
+  },
+  "author": "Holepunch",
+  "license": "Apache-2.0",
+  "bugs": {
+    "url": "https://github.com/holepunchto/libjnitl/issues"
+  },
+  "homepage": "https://github.com/holepunchto/libjnitl#readme",
+  "devDependencies": {
+    "cmake-fetch": "^1.4.1"
+  }
+}

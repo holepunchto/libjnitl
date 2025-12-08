@@ -1,0 +1,1910 @@
+#pragma once
+
+#include <array>
+#include <cstdint>
+#include <stdexcept>
+#include <string>
+#include <vector>
+
+#include <jni.h>
+
+template <size_t N>
+struct java_string_literal_t {
+  constexpr java_string_literal_t(const char (&data)[N]) {
+    std::copy_n(data, N, data_);
+  }
+
+  constexpr operator const char *() const {
+    return data_;
+  }
+
+  constexpr const char *
+  c_str() const {
+    return data_;
+  }
+
+private:
+  char data_[N];
+  static constexpr size_t size_ = N - 1;
+
+  template <size_t n, size_t m>
+  friend constexpr auto
+  operator+(java_string_literal_t<n> a, java_string_literal_t<m> b);
+};
+
+template <size_t n, size_t m>
+constexpr auto
+operator+(java_string_literal_t<n> a, java_string_literal_t<m> b) {
+  char result[n + m - 1];
+
+  for (size_t i = 0; i < n - 1; i++) {
+    result[i] = a.data_[i];
+  }
+
+  for (size_t i = 0; i < m - 1; i++) {
+    result[n - 1 + i] = b.data_[i];
+  }
+
+  result[n + m - 2] = '\0';
+
+  return java_string_literal_t<n + m - 1>(result);
+}
+
+struct java_value_t {
+  java_value_t() : env_(nullptr) {}
+
+  java_value_t(JNIEnv *env) : env_(env) {}
+
+  java_value_t(java_value_t &&that) {
+    swap(that);
+  }
+
+  java_value_t(const java_value_t &) = delete;
+
+  virtual ~java_value_t() = default;
+
+  java_value_t &
+  operator=(java_value_t &&that) {
+    swap(that);
+
+    return *this;
+  }
+
+  java_value_t &
+  operator=(const java_value_t &) = delete;
+
+  void
+  swap(java_value_t &that) {
+    std::swap(env_, that.env_);
+  }
+
+protected:
+  JNIEnv *env_;
+};
+
+template <typename T>
+struct java_field_t;
+
+template <typename T>
+struct java_method_t;
+
+struct java_object_t : java_value_t {
+  java_object_t() : java_value_t() {}
+
+  java_object_t(JNIEnv *env, jobject handle) : java_value_t(env), handle_(handle) {}
+
+  java_object_t(java_object_t &&that) {
+    swap(that);
+  }
+
+  java_object_t(const java_object_t &) = delete;
+
+  java_object_t &
+  operator=(java_object_t &&that) {
+    swap(that);
+
+    return *this;
+  }
+
+  java_object_t &
+  operator=(const java_object_t &) = delete;
+
+  operator jobject() const {
+    return handle_;
+  }
+
+  void
+  swap(java_object_t &that) {
+    java_value_t::swap(that);
+
+    std::swap(handle_, that.handle_);
+  }
+
+  template <typename T>
+  T
+  get(const java_field_t<T> &field) const;
+
+  template <typename T>
+  void
+  set(const java_field_t<T> &field, const T &value) const;
+
+  template <typename... A>
+  void
+  apply(const java_method_t<void(A...)> &method, A... args) const;
+
+  template <typename R, typename... A>
+  R
+  apply(const java_method_t<R(A...)> &method, A... args) const;
+
+protected:
+  jobject handle_;
+};
+
+struct java_string_t : java_object_t {
+  java_string_t() : java_object_t(), utf8_(nullptr) {}
+
+  java_string_t(JNIEnv *env, jstring handle) : java_object_t(env, handle), utf8_(nullptr) {}
+
+  java_string_t(java_string_t &&that) {
+    swap(that);
+  }
+
+  java_string_t(const java_string_t &) = delete;
+
+  ~java_string_t() {
+    if (utf8_) env_->ReleaseStringUTFChars(jstring(handle_), utf8_);
+  }
+
+  java_string_t &
+  operator=(java_string_t &&that) {
+    swap(that);
+
+    return *this;
+  }
+
+  java_string_t &
+  operator=(const java_string_t &) = delete;
+
+  operator jstring() const {
+    return jstring(handle_);
+  }
+
+  operator const char *() const {
+    if (utf8_ == nullptr) utf8_ = env_->GetStringUTFChars(jstring(handle_), nullptr);
+
+    return utf8_;
+  }
+
+  operator std::string() const {
+    return static_cast<const char *>(*this);
+  }
+
+  void
+  swap(java_string_t &that) {
+    java_object_t::swap(that);
+
+    std::swap(utf8_, that.utf8_);
+  }
+
+  auto
+  c_str() const {
+    return static_cast<const char *>(*this);
+  }
+
+private:
+  mutable const char *utf8_;
+};
+
+template <typename T, typename U>
+struct java_primitive_array_t : java_object_t {
+  java_primitive_array_t() : java_object_t(), elements_(nullptr) {}
+
+  java_primitive_array_t(JNIEnv *env, jarray handle) : java_object_t(env, handle), elements_(nullptr) {}
+
+  java_primitive_array_t(java_primitive_array_t &&that) {
+    swap(that);
+  }
+
+  java_primitive_array_t(const java_primitive_array_t &) = delete;
+
+  virtual ~java_primitive_array_t() = default;
+
+  java_primitive_array_t &
+  operator=(java_primitive_array_t &&that) {
+    swap(that);
+
+    return *this;
+  }
+
+  java_primitive_array_t &
+  operator=(const java_primitive_array_t &) = delete;
+
+  operator T *() const {
+    if (elements_ == nullptr) elements_ = get_array_elements();
+
+    return reinterpret_cast<T *>(elements_);
+  }
+
+  T &operator[](std::size_t idx) {
+    return static_cast<T *>(*this)[idx];
+  }
+
+  const T &operator[](std::size_t idx) const {
+    return static_cast<T *>(*this)[idx];
+  }
+
+  void
+  swap(java_primitive_array_t &that) {
+    java_object_t::swap(that);
+
+    std::swap(elements_, that.elements_);
+  }
+
+  int
+  size() const {
+    return env_->GetArrayLength(jarray(handle_));
+  }
+
+  void
+  commit() const {
+    if (elements_) release_array_elements(JNI_COMMIT);
+  }
+
+  void
+  abort() const {
+    if (elements_ == nullptr) return;
+
+    release_array_elements(JNI_ABORT);
+
+    elements_ = nullptr;
+  }
+
+protected:
+  virtual U *
+  get_array_elements() const = 0;
+
+  virtual void
+  release_array_elements(int mode) const = 0;
+
+  mutable U *elements_;
+};
+
+template <typename T>
+struct java_array_t;
+
+template <>
+struct java_array_t<bool> : java_primitive_array_t<bool, jboolean> {
+  java_array_t() : java_primitive_array_t() {}
+
+  java_array_t(JNIEnv *env, jbooleanArray handle) : java_primitive_array_t(env, handle) {}
+
+  java_array_t(java_array_t &&that) {
+    swap(that);
+  }
+
+  java_array_t(const java_array_t &) = delete;
+
+  ~java_array_t() override {
+    if (elements_) release_array_elements(0);
+  }
+
+  java_array_t &
+  operator=(java_array_t &&that) {
+    swap(that);
+
+    return *this;
+  }
+
+  java_array_t &
+  operator=(const java_array_t &) = delete;
+
+  operator jbooleanArray() const {
+    return jbooleanArray(handle_);
+  }
+
+protected:
+  jboolean *
+  get_array_elements() const override {
+    return env_->GetBooleanArrayElements(*this, nullptr);
+  }
+
+  void
+  release_array_elements(int mode) const override {
+    env_->ReleaseBooleanArrayElements(*this, elements_, mode);
+  }
+};
+
+template <>
+struct java_array_t<unsigned char> : java_primitive_array_t<unsigned char, jbyte> {
+  java_array_t() : java_primitive_array_t() {}
+
+  java_array_t(JNIEnv *env, jbyteArray handle) : java_primitive_array_t(env, handle) {}
+
+  java_array_t(java_array_t &&that) {
+    swap(that);
+  }
+
+  java_array_t(const java_array_t &) = delete;
+
+  ~java_array_t() override {
+    if (elements_) release_array_elements(0);
+  }
+
+  java_array_t &
+  operator=(java_array_t &&that) {
+    swap(that);
+
+    return *this;
+  }
+
+  java_array_t &
+  operator=(const java_array_t &) = delete;
+
+  operator jbyteArray() const {
+    return jbyteArray(handle_);
+  }
+
+protected:
+  jbyte *
+  get_array_elements() const override {
+    return env_->GetByteArrayElements(*this, nullptr);
+  }
+
+  void
+  release_array_elements(int mode) const override {
+    env_->ReleaseByteArrayElements(*this, elements_, mode);
+  }
+};
+
+template <>
+struct java_array_t<char> : java_primitive_array_t<char, jchar> {
+  java_array_t() : java_primitive_array_t() {}
+
+  java_array_t(JNIEnv *env, jcharArray handle) : java_primitive_array_t(env, handle) {}
+
+  java_array_t(java_array_t &&that) {
+    swap(that);
+  }
+
+  java_array_t(const java_array_t &) = delete;
+
+  ~java_array_t() override {
+    if (elements_) release_array_elements(0);
+  }
+
+  java_array_t &
+  operator=(java_array_t &&that) {
+    swap(that);
+
+    return *this;
+  }
+
+  java_array_t &
+  operator=(const java_array_t &) = delete;
+
+  operator jcharArray() const {
+    return jcharArray(handle_);
+  }
+
+protected:
+  jchar *
+  get_array_elements() const override {
+    return env_->GetCharArrayElements(*this, nullptr);
+  }
+
+  void
+  release_array_elements(int mode) const override {
+    env_->ReleaseCharArrayElements(*this, elements_, mode);
+  }
+};
+
+template <>
+struct java_array_t<short> : java_primitive_array_t<short, jshort> {
+  java_array_t() : java_primitive_array_t() {}
+
+  java_array_t(JNIEnv *env, jshortArray handle) : java_primitive_array_t(env, handle) {}
+
+  java_array_t(java_array_t &&that) {
+    swap(that);
+  }
+
+  java_array_t(const java_array_t &) = delete;
+
+  ~java_array_t() override {
+    if (elements_) release_array_elements(0);
+  }
+
+  java_array_t &
+  operator=(java_array_t &&that) {
+    swap(that);
+
+    return *this;
+  }
+
+  java_array_t &
+  operator=(const java_array_t &) = delete;
+
+  operator jshortArray() const {
+    return jshortArray(handle_);
+  }
+
+protected:
+  jshort *
+  get_array_elements() const override {
+    return env_->GetShortArrayElements(*this, nullptr);
+  }
+
+  void
+  release_array_elements(int mode) const override {
+    env_->ReleaseShortArrayElements(*this, elements_, mode);
+  }
+};
+
+template <>
+struct java_array_t<int> : java_primitive_array_t<int, jint> {
+  java_array_t() : java_primitive_array_t() {}
+
+  java_array_t(JNIEnv *env, jintArray handle) : java_primitive_array_t(env, handle) {}
+
+  java_array_t(java_array_t &&that) {
+    swap(that);
+  }
+
+  java_array_t(const java_array_t &) = delete;
+
+  ~java_array_t() override {
+    if (elements_) release_array_elements(0);
+  }
+
+  java_array_t &
+  operator=(java_array_t &&that) {
+    swap(that);
+
+    return *this;
+  }
+
+  java_array_t &
+  operator=(const java_array_t &) = delete;
+
+  operator jintArray() const {
+    return jintArray(handle_);
+  }
+
+protected:
+  jint *
+  get_array_elements() const override {
+    return env_->GetIntArrayElements(*this, nullptr);
+  }
+
+  void
+  release_array_elements(int mode) const override {
+    env_->ReleaseIntArrayElements(*this, elements_, mode);
+  }
+};
+
+template <>
+struct java_array_t<long> : java_primitive_array_t<long, jlong> {
+  java_array_t() : java_primitive_array_t() {}
+
+  java_array_t(JNIEnv *env, jlongArray handle) : java_primitive_array_t(env, handle) {}
+
+  java_array_t(java_array_t &&that) {
+    swap(that);
+  }
+
+  java_array_t(const java_array_t &) = delete;
+
+  ~java_array_t() override {
+    if (elements_) release_array_elements(0);
+  }
+
+  java_array_t &
+  operator=(java_array_t &&that) {
+    swap(that);
+
+    return *this;
+  }
+
+  java_array_t &
+  operator=(const java_array_t &) = delete;
+
+  operator jlongArray() const {
+    return jlongArray(handle_);
+  }
+
+protected:
+  jlong *
+  get_array_elements() const override {
+    return env_->GetLongArrayElements(*this, nullptr);
+  }
+
+  void
+  release_array_elements(int mode) const override {
+    env_->ReleaseLongArrayElements(*this, elements_, mode);
+  }
+};
+
+template <>
+struct java_array_t<float> : java_primitive_array_t<float, jfloat> {
+  java_array_t() : java_primitive_array_t() {}
+
+  java_array_t(JNIEnv *env, jfloatArray handle) : java_primitive_array_t(env, handle) {}
+
+  java_array_t(java_array_t &&that) {
+    swap(that);
+  }
+
+  java_array_t(const java_array_t &) = delete;
+
+  ~java_array_t() override {
+    if (elements_) release_array_elements(0);
+  }
+
+  java_array_t &
+  operator=(java_array_t &&that) {
+    swap(that);
+
+    return *this;
+  }
+
+  java_array_t &
+  operator=(const java_array_t &) = delete;
+
+  operator jfloatArray() const {
+    return jfloatArray(handle_);
+  }
+
+protected:
+  jfloat *
+  get_array_elements() const override {
+    return env_->GetFloatArrayElements(*this, nullptr);
+  }
+
+  void
+  release_array_elements(int mode) const override {
+    env_->ReleaseFloatArrayElements(*this, elements_, mode);
+  }
+};
+
+template <>
+struct java_array_t<double> : java_primitive_array_t<double, jdouble> {
+  java_array_t() : java_primitive_array_t() {}
+
+  java_array_t(JNIEnv *env, jdoubleArray handle) : java_primitive_array_t(env, handle) {}
+
+  java_array_t(java_array_t &&that) {
+    swap(that);
+  }
+
+  java_array_t(const java_array_t &) = delete;
+
+  ~java_array_t() override {
+    if (elements_) release_array_elements(0);
+  }
+
+  java_array_t &
+  operator=(java_array_t &&that) {
+    swap(that);
+
+    return *this;
+  }
+
+  java_array_t &
+  operator=(const java_array_t &) = delete;
+
+  operator jdoubleArray() const {
+    return jdoubleArray(handle_);
+  }
+
+protected:
+  jdouble *
+  get_array_elements() const override {
+    return env_->GetDoubleArrayElements(*this, nullptr);
+  }
+
+  void
+  release_array_elements(int mode) const override {
+    env_->ReleaseDoubleArrayElements(*this, elements_, mode);
+  }
+};
+
+template <typename T>
+struct java_array_t : java_object_t {
+  java_array_t() : java_object_t() {}
+
+  java_array_t(JNIEnv *env, jobjectArray handle) : java_object_t(env, handle) {}
+
+  java_array_t(java_array_t &&that) {
+    swap(that);
+  }
+
+  java_array_t(const java_array_t &) = delete;
+
+  java_array_t &
+  operator=(java_array_t &&that) {
+    swap(that);
+
+    return *this;
+  }
+
+  java_array_t &
+  operator=(const java_array_t &) = delete;
+
+  operator jobjectArray() const {
+    return jobjectArray(handle_);
+  }
+
+  int
+  size() const {
+    return env_->GetArrayLength(jarray(handle_));
+  }
+
+  T
+  get(int i) const {
+    return java_unmarshall_value<T>(env_, env_->GetObjectArrayElement(*this, i));
+  }
+
+  void
+  set(int i, const T &value) const {
+    env_->SetObjectArrayElement(*this, i, java_marshall_value(env_, value));
+  }
+};
+
+struct java_byte_buffer_t : java_object_t {
+  java_byte_buffer_t() : java_object_t(), data_(nullptr), size_(0) {}
+
+  java_byte_buffer_t(JNIEnv *env, jobject handle)
+      : java_object_t(env, handle),
+        data_(env->GetDirectBufferAddress(handle)),
+        size_(env->GetDirectBufferCapacity(handle)) {}
+
+  java_byte_buffer_t(java_byte_buffer_t &&that) {
+    swap(that);
+  }
+
+  java_byte_buffer_t(const java_byte_buffer_t &) = delete;
+
+  java_byte_buffer_t &
+  operator=(java_byte_buffer_t &&that) {
+    swap(that);
+
+    return *this;
+  }
+
+  java_byte_buffer_t &
+  operator=(const java_byte_buffer_t &) = delete;
+
+  operator jobjectArray() const {
+    return jobjectArray(handle_);
+  }
+
+  uint8_t &
+  operator[](size_t i) {
+    return reinterpret_cast<uint8_t *>(data_)[i];
+  }
+
+  const uint8_t
+  operator[](size_t i) const {
+    return reinterpret_cast<uint8_t *>(data_)[i];
+  }
+
+  void
+  swap(java_byte_buffer_t &that) {
+    java_object_t::swap(that);
+
+    std::swap(data_, that.data_);
+    std::swap(size_, that.size_);
+  }
+
+  uint8_t *
+  data() const {
+    return reinterpret_cast<uint8_t *>(data_);
+  }
+
+  size_t
+  size() const {
+    return size_;
+  }
+
+  bool
+  empty() const {
+    return size_ == 0;
+  }
+
+  uint8_t *
+  begin() const {
+    return reinterpret_cast<uint8_t *>(data_);
+  }
+
+  uint8_t *
+  end() const {
+    return reinterpret_cast<uint8_t *>(data_) + size_;
+  }
+
+private:
+  void *data_;
+  size_t size_;
+};
+
+template <typename T>
+struct java_type_info_t;
+
+template <>
+struct java_type_info_t<bool> {
+  using type = jboolean;
+
+  static constexpr java_string_literal_t signature = "Z";
+
+  static auto
+  marshall(JNIEnv *env, bool value) {
+    return jboolean(value);
+  }
+};
+
+template <>
+struct java_type_info_t<unsigned char> {
+  using type = jbyte;
+
+  static constexpr java_string_literal_t signature = "B";
+
+  static auto
+  marshall(JNIEnv *env, unsigned char value) {
+    return jbyte(value);
+  }
+};
+
+template <>
+struct java_type_info_t<char> {
+  using type = jchar;
+
+  static constexpr java_string_literal_t signature = "C";
+
+  static auto
+  marshall(JNIEnv *env, char value) {
+    return jchar(value);
+  }
+};
+
+template <>
+struct java_type_info_t<short> {
+  using type = jshort;
+
+  static constexpr java_string_literal_t signature = "S";
+
+  static auto
+  marshall(JNIEnv *env, short value) {
+    return jshort(value);
+  }
+};
+
+template <>
+struct java_type_info_t<int> {
+  using type = jint;
+
+  static constexpr java_string_literal_t signature = "I";
+
+  static auto
+  marshall(JNIEnv *env, int value) {
+    return jint(value);
+  }
+};
+
+template <>
+struct java_type_info_t<long> {
+  using type = jlong;
+
+  static constexpr java_string_literal_t signature = "L";
+
+  static auto
+  marshall(JNIEnv *env, long value) {
+    return jlong(value);
+  }
+};
+
+template <>
+struct java_type_info_t<float> {
+  using type = jfloat;
+
+  static constexpr java_string_literal_t signature = "F";
+
+  static auto
+  marshall(JNIEnv *env, float value) {
+    return jfloat(value);
+  }
+};
+
+template <>
+struct java_type_info_t<double> {
+  using type = jdouble;
+
+  static constexpr java_string_literal_t signature = "D";
+
+  static auto
+  marshall(JNIEnv *env, double value) {
+    return jdouble(value);
+  }
+};
+
+template <>
+struct java_type_info_t<java_object_t> {
+  using type = jobject;
+
+  static constexpr java_string_literal_t signature = "Ljava/lang/Object;";
+
+  static auto
+  marshall(JNIEnv *env, const java_object_t &value) {
+    return static_cast<jobject>(value);
+  }
+
+  static auto
+  unmarshall(JNIEnv *env, const jobject &value) {
+    return java_object_t(env, value);
+  }
+};
+
+template <>
+struct java_type_info_t<java_string_t> {
+  using type = jobject;
+
+  static constexpr java_string_literal_t signature = "Ljava/lang/String;";
+
+  static auto
+  marshall(JNIEnv *env, const java_string_t &value) {
+    return static_cast<jobject>(value);
+  }
+
+  static auto
+  unmarshall(JNIEnv *env, const jobject &value) {
+    return java_string_t(env, jstring(value));
+  }
+};
+
+template <>
+struct java_type_info_t<java_byte_buffer_t> {
+  using type = jobject;
+
+  static constexpr java_string_literal_t signature = "Ljava/nio/ByteBuffer;";
+
+  static auto
+  marshall(JNIEnv *env, const java_byte_buffer_t &value) {
+    return static_cast<jobject>(value);
+  }
+
+  static auto
+  unmarshall(JNIEnv *env, const jobject &value) {
+    return java_byte_buffer_t(env, value);
+  }
+};
+
+template <typename R>
+struct java_type_info_t<R(void)> {
+  static constexpr java_string_literal_t signature =
+    java_string_literal_t("()") +
+    java_type_info_t<R>::signature;
+};
+
+template <typename R, typename... A>
+struct java_type_info_t<R(A...)> {
+  static constexpr java_string_literal_t signature =
+    java_string_literal_t("(") +
+    (java_type_info_t<A>::signature + ...) +
+    java_string_literal_t(")") +
+    java_type_info_t<R>::signature;
+};
+
+template <typename T>
+struct java_type_info_t<std::vector<T>> {
+  using type = jobject;
+
+  static constexpr java_string_literal_t signature =
+    java_string_literal_t("[") +
+    java_type_info_t<T>::signature;
+};
+
+template <typename T, size_t N>
+struct java_type_info_t<std::array<T, N>> {
+  using type = jobject;
+
+  static constexpr java_string_literal_t signature =
+    java_string_literal_t("[") +
+    java_type_info_t<T>::signature;
+};
+
+template <>
+struct java_type_info_t<std::string> {
+  using type = jobject;
+
+  static constexpr java_string_literal_t signature = "Ljava/lang/String;";
+
+  static auto
+  unmarshall(JNIEnv *env, const jobject &value) {
+    auto chars = env->GetStringUTFChars(jstring(value), nullptr);
+
+    std::string result(chars);
+
+    env->ReleaseStringUTFChars(jstring(value), chars);
+
+    return result;
+  }
+};
+
+template <typename T>
+static auto
+java_marshall_value(JNIEnv *env, const T &value) {
+  return java_type_info_t<T>::marshall(env, value);
+}
+
+template <typename T>
+static jvalue
+java_marshall_argument_value(JNIEnv *env, const T &value) {
+  return jvalue(java_marshall_value(env, value));
+}
+
+template <typename T>
+static auto
+java_unmarshall_value(JNIEnv *env, const typename java_type_info_t<T>::type &value) {
+  return java_type_info_t<T>::unmarshall(env, value);
+}
+
+template <typename T>
+struct java_field_accessor_t;
+
+template <>
+struct java_field_accessor_t<bool> {
+  static auto
+  get(JNIEnv *env, jobject receiver, jfieldID field) {
+    return env->GetBooleanField(receiver, field);
+  }
+
+  static auto
+  get(JNIEnv *env, jclass receiver, jfieldID field) {
+    return env->GetStaticBooleanField(receiver, field);
+  }
+
+  static void
+  set(JNIEnv *env, jobject receiver, jfieldID field, jboolean value) {
+    env->SetBooleanField(receiver, field, value);
+  }
+
+  static void
+  set(JNIEnv *env, jclass receiver, jfieldID field, jboolean value) {
+    env->SetStaticBooleanField(receiver, field, value);
+  }
+};
+
+template <>
+struct java_field_accessor_t<unsigned char> {
+  static auto
+  get(JNIEnv *env, jobject receiver, jfieldID field) {
+    return env->GetByteField(receiver, field);
+  }
+
+  static auto
+  get(JNIEnv *env, jclass receiver, jfieldID field) {
+    return env->GetStaticByteField(receiver, field);
+  }
+
+  static void
+  set(JNIEnv *env, jobject receiver, jfieldID field, jbyte value) {
+    env->SetByteField(receiver, field, value);
+  }
+
+  static void
+  set(JNIEnv *env, jclass receiver, jfieldID field, jbyte value) {
+    env->SetStaticByteField(receiver, field, value);
+  }
+};
+
+template <>
+struct java_field_accessor_t<char> {
+  static auto
+  get(JNIEnv *env, jobject receiver, jfieldID field) {
+    return env->GetCharField(receiver, field);
+  }
+
+  static auto
+  get(JNIEnv *env, jclass receiver, jfieldID field) {
+    return env->GetStaticCharField(receiver, field);
+  }
+
+  static void
+  set(JNIEnv *env, jobject receiver, jfieldID field, jchar value) {
+    env->SetCharField(receiver, field, value);
+  }
+
+  static void
+  set(JNIEnv *env, jclass receiver, jfieldID field, jchar value) {
+    env->SetStaticCharField(receiver, field, value);
+  }
+};
+
+template <>
+struct java_field_accessor_t<short> {
+  static auto
+  get(JNIEnv *env, jobject receiver, jfieldID field) {
+    return env->GetShortField(receiver, field);
+  }
+
+  static auto
+  get(JNIEnv *env, jclass receiver, jfieldID field) {
+    return env->GetStaticShortField(receiver, field);
+  }
+
+  static void
+  set(JNIEnv *env, jobject receiver, jfieldID field, jshort value) {
+    env->SetShortField(receiver, field, value);
+  }
+
+  static void
+  set(JNIEnv *env, jclass receiver, jfieldID field, jshort value) {
+    env->SetStaticShortField(receiver, field, value);
+  }
+};
+
+template <>
+struct java_field_accessor_t<int> {
+  static auto
+  get(JNIEnv *env, jobject receiver, jfieldID field) {
+    return env->GetIntField(receiver, field);
+  }
+
+  static auto
+  get(JNIEnv *env, jclass receiver, jfieldID field) {
+    return env->GetStaticIntField(receiver, field);
+  }
+
+  static void
+  set(JNIEnv *env, jobject receiver, jfieldID field, jint value) {
+    env->SetIntField(receiver, field, value);
+  }
+
+  static void
+  set(JNIEnv *env, jclass receiver, jfieldID field, jint value) {
+    env->SetStaticIntField(receiver, field, value);
+  }
+};
+
+template <>
+struct java_field_accessor_t<long> {
+  static auto
+  get(JNIEnv *env, jobject receiver, jfieldID field) {
+    return env->GetLongField(receiver, field);
+  }
+
+  static auto
+  get(JNIEnv *env, jclass receiver, jfieldID field) {
+    return env->GetStaticLongField(receiver, field);
+  }
+
+  static void
+  set(JNIEnv *env, jobject receiver, jfieldID field, jlong value) {
+    env->SetLongField(receiver, field, value);
+  }
+
+  static void
+  set(JNIEnv *env, jclass receiver, jfieldID field, jlong value) {
+    env->SetStaticLongField(receiver, field, value);
+  }
+};
+
+template <>
+struct java_field_accessor_t<float> {
+  static auto
+  get(JNIEnv *env, jobject receiver, jfieldID field) {
+    return env->GetFloatField(receiver, field);
+  }
+
+  static auto
+  get(JNIEnv *env, jclass receiver, jfieldID field) {
+    return env->GetStaticFloatField(receiver, field);
+  }
+
+  static void
+  set(JNIEnv *env, jobject receiver, jfieldID field, jfloat value) {
+    env->SetFloatField(receiver, field, value);
+  }
+
+  static void
+  set(JNIEnv *env, jclass receiver, jfieldID field, jfloat value) {
+    env->SetStaticFloatField(receiver, field, value);
+  }
+};
+
+template <>
+struct java_field_accessor_t<double> {
+  static auto
+  get(JNIEnv *env, jobject receiver, jfieldID field) {
+    return env->GetDoubleField(receiver, field);
+  }
+
+  static auto
+  get(JNIEnv *env, jclass receiver, jfieldID field) {
+    return env->GetStaticDoubleField(receiver, field);
+  }
+
+  static void
+  set(JNIEnv *env, jobject receiver, jfieldID field, jdouble value) {
+    env->SetDoubleField(receiver, field, value);
+  }
+
+  static void
+  set(JNIEnv *env, jclass receiver, jfieldID field, jdouble value) {
+    env->SetStaticDoubleField(receiver, field, value);
+  }
+};
+
+template <typename T>
+struct java_field_accessor_t {
+  static auto
+  get(JNIEnv *env, jobject receiver, jfieldID field) {
+    return java_unmarshall_value<T>(env, env->GetObjectField(receiver, field));
+  }
+
+  static auto
+  get(JNIEnv *env, jclass receiver, jfieldID field) {
+    return java_unmarshall_value<T>(env, env->GetStaticObjectField(receiver, field));
+  }
+
+  static void
+  set(JNIEnv *env, jobject receiver, jfieldID field, const T &value) {
+    env->SetObjectField(receiver, field, java_marshall_value(env, value));
+  }
+
+  static void
+  set(JNIEnv *env, jclass receiver, jfieldID field, const T &value) {
+    env->SetStaticObjectField(receiver, field, java_marshall_value(value));
+  }
+};
+
+struct java_field_base_t {
+  java_field_base_t() : env_(nullptr), class_(nullptr), id_(nullptr) {}
+
+  java_field_base_t(JNIEnv *env, jclass clazz, jfieldID id) : env_(env), class_(clazz), id_(id) {}
+
+  java_field_base_t(java_field_base_t &&) = default;
+
+  java_field_base_t(const java_field_base_t &) = delete;
+
+  java_field_base_t &
+  operator=(java_field_base_t &&) = default;
+
+  java_field_base_t &
+  operator=(const java_field_base_t &) = delete;
+
+  operator jfieldID() const {
+    return id_;
+  }
+
+protected:
+  JNIEnv *env_;
+  jclass class_;
+  jfieldID id_;
+};
+
+template <typename T>
+struct java_field_t : java_field_base_t {
+  auto
+  get(const java_object_t &receiver) const {
+    return java_field_accessor_t<T>::get(env_, receiver, id_);
+  }
+
+  void
+  set(const java_object_t &receiver, const T &value) const {
+    java_field_accessor_t<T>::set(env_, receiver, id_, value);
+  }
+};
+
+template <typename T>
+struct java_static_field_t : java_field_base_t {
+  auto
+  get() const {
+    return java_field_accessor_t<T>::get(env_, class_, id_);
+  }
+
+  void
+  set(const T &value) const {
+    java_field_accessor_t<T>::set(env_, class_, id_, value);
+  }
+};
+
+template <typename T>
+T
+java_object_t::get(const java_field_t<T> &field) const {
+  return field.get(*this);
+}
+
+template <typename T>
+void
+java_object_t::set(const java_field_t<T> &field, const T &value) const {
+  return field.set(*this, value);
+}
+
+template <typename T>
+struct java_method_invoker_t;
+
+template <typename... A>
+struct java_method_invoker_t<void(A...)> {
+  static void
+  call(JNIEnv *env, jobject receiver, jmethodID method, A... args) {
+    jvalue argv[] = {
+      java_marshall_argument_value(env, args)...
+    };
+
+    env->CallVoidMethodA(receiver, method, argv);
+  }
+
+  static void
+  call(JNIEnv *env, jclass receiver, jmethodID method, A... args) {
+    jvalue argv[] = {
+      java_marshall_argument_value(env, args)...
+    };
+
+    env->CallStaticVoidMethodA(receiver, method, argv);
+  }
+};
+
+template <typename... A>
+struct java_method_invoker_t<bool(A...)> {
+  static bool
+  call(JNIEnv *env, jobject receiver, jmethodID method, A... args) {
+    jvalue argv[] = {
+      java_marshall_argument_value(env, args)...
+    };
+
+    return env->CallBooleanMethodA(receiver, method, argv);
+  }
+
+  static bool
+  call(JNIEnv *env, jclass receiver, jmethodID method, A... args) {
+    jvalue argv[] = {
+      java_marshall_argument_value(env, args)...
+    };
+
+    return env->CallStaticBooleanMethodA(receiver, method, argv);
+  }
+};
+
+template <typename... A>
+struct java_method_invoker_t<unsigned char(A...)> {
+  static unsigned char
+  call(JNIEnv *env, jobject receiver, jmethodID method, A... args) {
+    jvalue argv[] = {
+      java_marshall_argument_value(env, args)...
+    };
+
+    return env->CallByteMethodA(receiver, method, argv);
+  }
+
+  static unsigned char
+  call(JNIEnv *env, jclass receiver, jmethodID method, A... args) {
+    jvalue argv[] = {
+      java_marshall_argument_value(env, args)...
+    };
+
+    return env->CallStaticByteMethodA(receiver, method, argv);
+  }
+};
+
+template <typename... A>
+struct java_method_invoker_t<char(A...)> {
+  static char
+  call(JNIEnv *env, jobject receiver, jmethodID method, A... args) {
+    jvalue argv[] = {
+      java_marshall_argument_value(env, args)...
+    };
+
+    return env->CallCharMethodA(receiver, method, argv);
+  }
+
+  static char
+  call(JNIEnv *env, jclass receiver, jmethodID method, A... args) {
+    jvalue argv[] = {
+      java_marshall_argument_value(env, args)...
+    };
+
+    return env->CallStaticCharMethodA(receiver, method, argv);
+  }
+};
+
+template <typename... A>
+struct java_method_invoker_t<short(A...)> {
+  static short
+  call(JNIEnv *env, jobject receiver, jmethodID method, A... args) {
+    jvalue argv[] = {
+      java_marshall_argument_value(env, args)...
+    };
+
+    return env->CallShortMethodA(receiver, method, argv);
+  }
+
+  static char
+  call(JNIEnv *env, jclass receiver, jmethodID method, A... args) {
+    jvalue argv[] = {
+      java_marshall_argument_value(env, args)...
+    };
+
+    return env->CallStaticShortMethodA(receiver, method, argv);
+  }
+};
+
+template <typename... A>
+struct java_method_invoker_t<int(A...)> {
+  static int
+  call(JNIEnv *env, jobject receiver, jmethodID method, A... args) {
+    jvalue argv[] = {
+      java_marshall_argument_value(env, args)...
+    };
+
+    return env->CallIntMethodA(receiver, method, argv);
+  }
+
+  static int
+  call(JNIEnv *env, jclass receiver, jmethodID method, A... args) {
+    jvalue argv[] = {
+      java_marshall_argument_value(env, args)...
+    };
+
+    return env->CallStaticIntMethodA(receiver, method, argv);
+  }
+};
+
+template <typename... A>
+struct java_method_invoker_t<long(A...)> {
+  static long
+  call(JNIEnv *env, jobject receiver, jmethodID method, A... args) {
+    jvalue argv[] = {
+      java_marshall_argument_value(env, args)...
+    };
+
+    return env->CallLongMethodA(receiver, method, argv);
+  }
+
+  static long
+  call(JNIEnv *env, jclass receiver, jmethodID method, A... args) {
+    jvalue argv[] = {
+      java_marshall_argument_value(env, args)...
+    };
+
+    return env->CallStaticLongMethodA(receiver, method, argv);
+  }
+};
+
+template <typename... A>
+struct java_method_invoker_t<float(A...)> {
+  static float
+  call(JNIEnv *env, jobject receiver, jmethodID method, A... args) {
+    jvalue argv[] = {
+      java_marshall_argument_value(env, args)...
+    };
+
+    return env->CallFloatMethodA(receiver, method, argv);
+  }
+
+  static float
+  call(JNIEnv *env, jclass receiver, jmethodID method, A... args) {
+    jvalue argv[] = {
+      java_marshall_argument_value(env, args)...
+    };
+
+    return env->CallStaticFloatMethodA(receiver, method, argv);
+  }
+};
+
+template <typename... A>
+struct java_method_invoker_t<double(A...)> {
+  static double
+  call(JNIEnv *env, jobject receiver, jmethodID method, A... args) {
+    jvalue argv[] = {
+      java_marshall_argument_value(env, args)...
+    };
+
+    return env->CallDoubleMethodA(receiver, method, argv);
+  }
+
+  static double
+  call(JNIEnv *env, jclass receiver, jmethodID method, A... args) {
+    jvalue argv[] = {
+      java_marshall_argument_value(env, args)...
+    };
+
+    return env->CallStaticDoubleMethodA(receiver, method, argv);
+  }
+};
+
+template <typename R, typename... A>
+struct java_method_invoker_t<R(A...)> {
+  static R
+  call(JNIEnv *env, jobject receiver, jmethodID method, A... args) {
+    jvalue argv[] = {
+      java_marshall_argument_value(env, args)...
+    };
+
+    return java_unmarshall_value<R>(env, env->CallObjectMethodA(receiver, method, argv));
+  }
+
+  static R
+  call(JNIEnv *env, jclass receiver, jmethodID method, A... args) {
+    jvalue argv[] = {
+      java_marshall_argument_value(env, args)...
+    };
+
+    return java_unmarshall_value<R>(env, env->CallStaticObjectMethodA(receiver, method, argv));
+  }
+};
+
+struct java_method_base_t {
+  java_method_base_t() : env_(nullptr), class_(nullptr), id_(nullptr) {}
+
+  java_method_base_t(JNIEnv *env, jclass clazz, jmethodID id) : env_(env), class_(clazz), id_(id) {}
+
+  java_method_base_t(java_method_base_t &&) = default;
+
+  java_method_base_t(const java_method_base_t &) = delete;
+
+  java_method_base_t &
+  operator=(java_method_base_t &&) = default;
+
+  java_method_base_t &
+  operator=(const java_method_base_t &) = delete;
+
+  operator jmethodID() const {
+    return id_;
+  }
+
+protected:
+  JNIEnv *env_;
+  jclass class_;
+  jmethodID id_;
+};
+
+template <typename T>
+struct java_method_t;
+
+template <typename... A>
+struct java_method_t<void(A...)> : java_method_base_t {
+  void call(const java_object_t &receiver, A... args) const {
+    java_method_invoker_t<void(A...)>::call(env_, receiver, id_, args...);
+  }
+
+  void operator()(const java_object_t &receiver, A... args) const {
+    call(receiver, args...);
+  }
+};
+
+template <typename R, typename... A>
+struct java_method_t<R(A...)> : java_method_base_t {
+  R call(const java_object_t &receiver, A... args) const {
+    return java_method_invoker_t<R(A...)>::call(env_, receiver, id_, args...);
+  }
+
+  R operator()(const java_object_t &receiver, A... args) const {
+    return call(receiver, args...);
+  }
+};
+
+template <typename... A>
+void
+java_object_t::apply(const java_method_t<void(A...)> &method, A... args) const {
+  method(*this, args...);
+}
+
+template <typename R, typename... A>
+R
+java_object_t::apply(const java_method_t<R(A...)> &method, A... args) const {
+  return method(*this, args...);
+}
+
+template <typename T>
+struct java_static_method_t;
+
+template <typename... A>
+struct java_static_method_t<void(A...)> : java_method_base_t {
+  void call(A... args) const {
+    java_method_invoker_t<void(A...)>::call(env_, class_, id_, args...);
+  }
+
+  void operator()(A... args) const {
+    call(args...);
+  }
+};
+
+template <typename R, typename... A>
+struct java_static_method_t<R(A...)> : java_method_base_t {
+  R call(A... args) const {
+    return java_method_invoker_t<R(A...)>::call(env_, class_, id_, args...);
+  }
+
+  R operator()(A... args) const {
+    call(args...);
+  }
+};
+
+template <typename T = java_object_t>
+struct java_class_t {
+  java_class_t() : env_(nullptr), class_(nullptr) {}
+
+  java_class_t(JNIEnv *env, jclass clazz) : env_(env), class_(clazz) {}
+
+  java_class_t(java_class_t &&) = default;
+
+  java_class_t(const java_class_t &) = delete;
+
+  java_class_t &
+  operator=(java_class_t &&) = default;
+
+  java_class_t &
+  operator=(const java_class_t &) = delete;
+
+  operator jclass() const {
+    return class_;
+  }
+
+  template <typename U>
+  java_field_t<U>
+  get_field(const char *name) const {
+    auto signature = java_type_info_t<U>::signature.c_str();
+
+    auto id = env_->GetFieldID(class_, name, signature);
+
+    if (id == nullptr) {
+      throw std::invalid_argument(
+        "Could not find field '" + std::string(name) + "' with signature '" + std::string(signature) + "'"
+      );
+    }
+
+    return java_field_t<U>(java_field_base_t(env_, class_, id));
+  }
+
+  template <typename U>
+  auto
+  get_field(std::string name) const {
+    return get_field<U>(name.c_str());
+  }
+
+  template <typename U>
+  java_static_field_t<U>
+  get_static_field(const char *name) const {
+    auto signature = java_type_info_t<U>::signature.c_str();
+
+    auto id = env_->GetStaticFieldID(class_, name, signature);
+
+    if (id == nullptr) {
+      throw std::invalid_argument(
+        "Could not find field '" + std::string(name) + "' with signature '" + std::string(signature) + "'"
+      );
+    }
+
+    return java_static_field_t<U>(java_field_base_t(env_, class_, id));
+  }
+
+  template <typename U>
+  auto
+  get_static_field(std::string name) const {
+    return get_static_field<U>(name.c_str());
+  }
+
+  template <typename U>
+  java_method_t<U>
+  get_method(const char *name) const {
+    auto signature = java_type_info_t<U>::signature.c_str();
+
+    auto id = env_->GetMethodID(class_, name, signature);
+
+    if (id == nullptr) {
+      throw std::invalid_argument(
+        "Could not find method '" + std::string(name) + "' with signature '" + std::string(signature) + "'"
+      );
+    }
+
+    return java_method_t<U>(java_method_base_t(env_, class_, id));
+  }
+
+  template <typename U>
+  auto
+  get_method(std::string name) const {
+    return get_method<U>(name.c_str());
+  }
+
+  template <typename U>
+  java_static_method_t<U>
+  get_static_method(const char *name) const {
+    auto signature = java_type_info_t<U>::signature.c_str();
+
+    auto id = env_->GetStaticMethodID(class_, name, signature);
+
+    if (id == nullptr) {
+      throw std::invalid_argument(
+        "Could not find method '" + std::string(name) + "' with signature '" + std::string(signature) + "'"
+      );
+    }
+
+    return java_static_method_t<U>(java_method_base_t(env_, class_, id));
+  }
+
+  template <typename U>
+  auto
+  get_static_method(std::string name) const {
+    return get_static_method<U>(name.c_str());
+  }
+
+  template <typename U>
+  U
+  get(const java_static_field_t<U> &field) const {
+    return java_field_accessor_t<U>::get(env_, class_, field);
+  }
+
+  template <typename U>
+  void
+  set(const java_static_field_t<U> &field, const U &value) const {
+    java_field_accessor_t<U>::set(env_, class_, field, value);
+  }
+
+  template <typename... A>
+  void
+  apply(const java_static_method_t<void(A...)> &method, A... args) const {
+    method(*this, args...);
+  }
+
+  template <typename R, typename... A>
+  R
+  apply(const java_static_method_t<R(A...)> &method, A... args) const {
+    return method(*this, args...);
+  }
+
+private:
+  JNIEnv *env_;
+  jclass class_;
+};
+
+struct java_env_t {
+  java_env_t() : vm_(nullptr), env_(nullptr), detach_(false) {}
+
+  java_env_t(JavaVM *vm, JNIEnv *env, bool detach) : vm_(vm), env_(env), detach_(detach) {}
+
+  java_env_t(java_env_t &&that) : java_env_t() {
+    swap(that);
+  }
+
+  java_env_t(const java_env_t &) = delete;
+
+  ~java_env_t() {
+    if (detach_) vm_->DetachCurrentThread();
+  }
+
+  java_env_t &
+  operator=(java_env_t &&that) {
+    swap(that);
+
+    return *this;
+  }
+
+  java_env_t &
+  operator=(const java_env_t &) = delete;
+
+  operator JNIEnv *() const {
+    return env_;
+  }
+
+  void
+  swap(java_env_t &that) {
+    std::swap(vm_, that.vm_);
+    std::swap(env_, that.env_);
+    std::swap(detach_, that.detach_);
+  }
+
+  template <typename T = java_object_t>
+  java_class_t<T>
+  find_class(const char *name) const {
+    auto clazz = env_->FindClass(name);
+
+    if (clazz == nullptr) {
+      throw std::invalid_argument("Could not find class with name '" + std::string(name) + "'");
+    }
+
+    return java_class_t<T>(env_, clazz);
+  }
+
+  template <typename T = java_object_t>
+  auto
+  find_class(std::string name) const {
+    return find_class<T>(name.c_str());
+  }
+
+  java_string_t
+  new_string(const char *value) const {
+    return java_string_t(env_, env_->NewStringUTF(value));
+  }
+
+  java_string_t
+  new_string(std::string value) const {
+    return new_string(value.c_str());
+  }
+
+  template <typename T>
+  java_array_t<T>
+  new_array(int len) const;
+
+  template <>
+  java_array_t<bool>
+  new_array(int len) const {
+    return java_array_t<bool>(env_, env_->NewBooleanArray(len));
+  }
+
+  template <>
+  java_array_t<unsigned char>
+  new_array(int len) const {
+    return java_array_t<unsigned char>(env_, env_->NewByteArray(len));
+  }
+
+  template <>
+  java_array_t<char>
+  new_array(int len) const {
+    return java_array_t<char>(env_, env_->NewCharArray(len));
+  }
+
+  template <>
+  java_array_t<short>
+  new_array(int len) const {
+    return java_array_t<short>(env_, env_->NewShortArray(len));
+  }
+
+  template <>
+  java_array_t<int>
+  new_array(int len) const {
+    return java_array_t<int>(env_, env_->NewIntArray(len));
+  }
+
+  template <>
+  java_array_t<long>
+  new_array(int len) const {
+    return java_array_t<long>(env_, env_->NewLongArray(len));
+  }
+
+  template <>
+  java_array_t<float>
+  new_array(int len) const {
+    return java_array_t<float>(env_, env_->NewFloatArray(len));
+  }
+
+  template <>
+  java_array_t<double>
+  new_array(int len) const {
+    return java_array_t<double>(env_, env_->NewDoubleArray(len));
+  }
+
+  template <typename T>
+  java_array_t<T>
+  new_array(int len, const java_class_t<T> &type, const T &initial) const {
+    return java_array_t<T>(env_, env_->NewObjectArray(len, type, java_marshall_value(env_, initial)));
+  }
+
+  java_byte_buffer_t
+  new_direct_byte_buffer(uint8_t *data, size_t size) {
+    return java_byte_buffer_t(env_, env_->NewDirectByteBuffer(data, size));
+  }
+
+  java_byte_buffer_t
+  allocate_direct_byte_buffer(size_t size) {
+    return find_class("java/nio/ByteBuffer").get_static_method<java_byte_buffer_t(int)>("allocateDirect").call(size);
+  }
+
+private:
+  JavaVM *vm_;
+  JNIEnv *env_;
+  bool detach_;
+};
+
+struct java_vm_t {
+  java_vm_t() : vm_(nullptr), destroy_(false) {}
+
+  java_vm_t(JavaVM *vm, bool destroy) : vm_(vm), destroy_(destroy) {}
+
+  java_vm_t(java_vm_t &&that) : java_vm_t() {
+    swap(that);
+  }
+
+  java_vm_t(const java_vm_t &) = delete;
+
+  ~java_vm_t() {
+    if (destroy_) vm_->DestroyJavaVM();
+  }
+
+  java_vm_t &
+  operator=(java_vm_t &&that) {
+    swap(that);
+
+    return *this;
+  }
+
+  java_vm_t &
+  operator=(const java_vm_t &) = delete;
+
+  operator JavaVM *() const {
+    return vm_;
+  }
+
+  void
+  swap(java_vm_t &that) {
+    std::swap(vm_, that.vm_);
+    std::swap(destroy_, that.destroy_);
+  }
+
+  static std::optional<java_vm_t>
+  get_created() {
+    int err;
+
+    JavaVM *vm;
+    int len;
+    err = JNI_GetCreatedJavaVMs(&vm, 1, &len);
+
+    if (err != JNI_OK) return std::nullopt;
+
+    return java_vm_t(vm, false);
+  }
+
+  static std::pair<java_vm_t, java_env_t>
+  create(std::vector<std::string> options) {
+    int err;
+
+    std::vector<JavaVMOption> vm_options;
+
+    vm_options.reserve(options.size());
+
+    for (const auto &option : options) {
+      vm_options.push_back({const_cast<char *>(option.c_str())});
+    }
+
+    JavaVMInitArgs vm_args;
+
+    vm_args.version = JNI_VERSION_1_6;
+    vm_args.options = vm_options.data();
+    vm_args.nOptions = vm_options.size();
+    vm_args.ignoreUnrecognized = true;
+
+    JavaVM *vm;
+    JNIEnv *env;
+    err = JNI_CreateJavaVM(&vm, reinterpret_cast<void **>(&env), reinterpret_cast<void *>(&vm_args));
+
+    if (err != JNI_OK) throw std::invalid_argument("Could not create VM");
+
+    return std::pair(java_vm_t(vm, true), java_env_t(vm, env, false));
+  }
+
+  static auto
+  create(std::string options...) {
+    return create(std::vector({options}));
+  }
+
+  static auto
+  create() {
+    return create(std::vector<std::string>());
+  }
+
+  std::optional<java_env_t>
+  get_env() const {
+    int err;
+
+    JNIEnv *env;
+    err = vm_->GetEnv(reinterpret_cast<void **>(&env), JNI_VERSION_1_6);
+
+    if (err != JNI_OK) return std::nullopt;
+
+    return java_env_t(vm_, env, false);
+  }
+
+  java_env_t
+  attach_current_thread() const {
+    int err;
+
+    JNIEnv *env;
+    err = vm_->AttachCurrentThread(reinterpret_cast<void **>(&env), nullptr);
+
+    if (err != JNI_OK) throw std::invalid_argument("Could not attach current thread");
+
+    return java_env_t(vm_, env, true);
+  }
+
+private:
+  JavaVM *vm_;
+  bool destroy_;
+};
