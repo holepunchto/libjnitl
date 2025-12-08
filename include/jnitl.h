@@ -1783,11 +1783,6 @@ struct java_env_t {
     return java_byte_buffer_t(env_, env_->NewDirectByteBuffer(data, size));
   }
 
-  java_byte_buffer_t
-  allocate_direct_byte_buffer(size_t size) {
-    return find_class("java/nio/ByteBuffer").get_static_method<java_byte_buffer_t(int)>("allocateDirect").call(size);
-  }
-
 private:
   JavaVM *vm_;
   JNIEnv *env_;
