@@ -138,6 +138,9 @@ struct java_object_t : java_value_t {
 
 protected:
   jobject handle_;
+
+  template <typename T>
+  friend struct java_global_ref_t;
 };
 
 template <typename T = java_object_t>
