@@ -140,6 +140,33 @@ protected:
   jobject handle_;
 };
 
+struct java_global_ref_t : java_object_t {
+  java_global_ref_t() : java_object_t() {}
+
+  java_global_ref_t(JNIEnv *env, jobject handle)
+      : java_object_t(env, handle) {}
+
+  java_global_ref_t(java_global_ref_t &&that) {
+    swap(that);
+  }
+
+  java_global_ref_t(const java_global_ref_t &) = delete;
+
+  ~java_global_ref_t() {
+    if (handle_) env_->DeleteGlobalRef(handle_);
+  }
+
+  java_global_ref_t &
+  operator=(java_global_ref_t &&that) {
+    swap(that);
+
+    return *this;
+  }
+
+  java_global_ref_t &
+  operator=(const java_global_ref_t &) = delete;
+};
+
 struct java_string_t : java_object_t {
   java_string_t() : java_object_t(), utf8_(nullptr) {}
 
@@ -1708,6 +1735,11 @@ struct java_env_t {
   auto
   find_class(std::string name) const {
     return find_class<T>(name.c_str());
+  }
+
+  java_global_ref_t
+  new_global_ref(const java_object_t &object) {
+    return java_global_ref_t(env_, env_->NewGlobalRef(object));
   }
 
   java_string_t
