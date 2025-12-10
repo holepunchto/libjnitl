@@ -234,8 +234,6 @@ struct java_primitive_array_t : java_object_t {
 
   java_primitive_array_t(const java_primitive_array_t &) = delete;
 
-  virtual ~java_primitive_array_t() = default;
-
   java_primitive_array_t &
   operator=(java_primitive_array_t &&that) {
     swap(that);
@@ -1547,23 +1545,29 @@ struct java_static_method_t<R(A...)> : java_method_base_t {
 };
 
 template <typename T = java_object_t>
-struct java_class_t {
-  java_class_t() : env_(nullptr), class_(nullptr) {}
+struct java_class_t : java_object_t {
+  java_class_t() : java_object_t() {}
 
-  java_class_t(JNIEnv *env, jclass clazz) : env_(env), class_(clazz) {}
+  java_class_t(JNIEnv *env, jclass clazz) : java_object_t(env, clazz) {}
 
-  java_class_t(java_class_t &&) = default;
+  java_class_t(java_class_t &&that) {
+    swap(that);
+  }
 
   java_class_t(const java_class_t &) = delete;
 
   java_class_t &
-  operator=(java_class_t &&) = default;
+  operator=(java_class_t &&that) {
+    swap(that);
+
+    return *this;
+  }
 
   java_class_t &
   operator=(const java_class_t &) = delete;
 
   operator jclass() const {
-    return class_;
+    return handle_;
   }
 
   template <typename U>
@@ -1571,7 +1575,7 @@ struct java_class_t {
   get_field(const char *name) const {
     auto signature = java_type_info_t<U>::signature.c_str();
 
-    auto id = env_->GetFieldID(class_, name, signature);
+    auto id = env_->GetFieldID(handle_, name, signature);
 
     if (id == nullptr) {
       throw std::invalid_argument(
@@ -1579,7 +1583,7 @@ struct java_class_t {
       );
     }
 
-    return java_field_t<U>(java_field_base_t(env_, class_, id));
+    return java_field_t<U>(java_field_base_t(env_, handle_, id));
   }
 
   template <typename U>
@@ -1593,7 +1597,7 @@ struct java_class_t {
   get_static_field(const char *name) const {
     auto signature = java_type_info_t<U>::signature.c_str();
 
-    auto id = env_->GetStaticFieldID(class_, name, signature);
+    auto id = env_->GetStaticFieldID(handle_, name, signature);
 
     if (id == nullptr) {
       throw std::invalid_argument(
@@ -1601,7 +1605,7 @@ struct java_class_t {
       );
     }
 
-    return java_static_field_t<U>(java_field_base_t(env_, class_, id));
+    return java_static_field_t<U>(java_field_base_t(env_, handle_, id));
   }
 
   template <typename U>
@@ -1615,7 +1619,7 @@ struct java_class_t {
   get_method(const char *name) const {
     auto signature = java_type_info_t<U>::signature.c_str();
 
-    auto id = env_->GetMethodID(class_, name, signature);
+    auto id = env_->GetMethodID(handle_, name, signature);
 
     if (id == nullptr) {
       throw std::invalid_argument(
@@ -1623,7 +1627,7 @@ struct java_class_t {
       );
     }
 
-    return java_method_t<U>(java_method_base_t(env_, class_, id));
+    return java_method_t<U>(java_method_base_t(env_, handle_, id));
   }
 
   template <typename U>
@@ -1637,7 +1641,7 @@ struct java_class_t {
   get_static_method(const char *name) const {
     auto signature = java_type_info_t<U>::signature.c_str();
 
-    auto id = env_->GetStaticMethodID(class_, name, signature);
+    auto id = env_->GetStaticMethodID(handle_, name, signature);
 
     if (id == nullptr) {
       throw std::invalid_argument(
@@ -1645,7 +1649,7 @@ struct java_class_t {
       );
     }
 
-    return java_static_method_t<U>(java_method_base_t(env_, class_, id));
+    return java_static_method_t<U>(java_method_base_t(env_, handle_, id));
   }
 
   template <typename U>
@@ -1657,13 +1661,13 @@ struct java_class_t {
   template <typename U>
   U
   get(const java_static_field_t<U> &field) const {
-    return java_field_accessor_t<U>::get(env_, class_, field);
+    return java_field_accessor_t<U>::get(env_, handle_, field);
   }
 
   template <typename U>
   void
   set(const java_static_field_t<U> &field, const U &value) const {
-    java_field_accessor_t<U>::set(env_, class_, field, value);
+    java_field_accessor_t<U>::set(env_, handle_, field, value);
   }
 
   template <typename... A>
@@ -1677,16 +1681,16 @@ struct java_class_t {
   apply(const java_static_method_t<R(A...)> &method, A... args) const {
     return method(*this, args...);
   }
-
-private:
-  JNIEnv *env_;
-  jclass class_;
 };
 
 struct java_env_t {
   java_env_t() : vm_(nullptr), env_(nullptr), detach_(false) {}
 
   java_env_t(JavaVM *vm, JNIEnv *env, bool detach) : vm_(vm), env_(env), detach_(detach) {}
+
+  java_env_t(JNIEnv *env) : vm_(nullptr), env_(env), detach_(false) {
+    env_->GetJavaVM(&vm_);
+  }
 
   java_env_t(java_env_t &&that) : java_env_t() {
     swap(that);
@@ -1826,6 +1830,8 @@ struct java_vm_t {
 
   java_vm_t(JavaVM *vm, bool destroy) : vm_(vm), destroy_(destroy) {}
 
+  java_vm_t(JavaVM *vm) : vm_(vm), destroy_(false) {}
+
   java_vm_t(java_vm_t &&that) : java_vm_t() {
     swap(that);
   }
@@ -1890,7 +1896,12 @@ struct java_vm_t {
 
     JavaVM *vm;
     JNIEnv *env;
+
+#if defined(__ANDROID__)
+    err = JNI_CreateJavaVM(&vm, &env, &vm_args);
+#else
     err = JNI_CreateJavaVM(&vm, reinterpret_cast<void **>(&env), reinterpret_cast<void *>(&vm_args));
+#endif
 
     if (err != JNI_OK) throw std::invalid_argument("Could not create VM");
 
@@ -1924,7 +1935,12 @@ struct java_vm_t {
     int err;
 
     JNIEnv *env;
+
+#if defined(__ANDROID__)
+    err = vm_->AttachCurrentThread(&env, nullptr);
+#else
     err = vm_->AttachCurrentThread(reinterpret_cast<void **>(&env), nullptr);
+#endif
 
     if (err != JNI_OK) throw std::invalid_argument("Could not attach current thread");
 
