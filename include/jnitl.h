@@ -140,11 +140,13 @@ protected:
   jobject handle_;
 };
 
+template <typename T = java_object_t>
 struct java_global_ref_t : java_object_t {
   java_global_ref_t() : java_object_t() {}
 
-  java_global_ref_t(JNIEnv *env, jobject handle)
-      : java_object_t(env, handle) {}
+  java_global_ref_t(JNIEnv *env, jobject handle) : java_object_t(env, env->NewGlobalRef(handle)) {}
+
+  java_global_ref_t(const T &object) : java_global_ref_t(object.env_, object.handle_) {}
 
   java_global_ref_t(java_global_ref_t &&that) {
     swap(that);
@@ -165,12 +167,26 @@ struct java_global_ref_t : java_object_t {
 
   java_global_ref_t &
   operator=(const java_global_ref_t &) = delete;
+
+  T &
+  operator*() {
+    return T(env_, handle_);
+  }
+
+  const T &
+  operator*() const {
+    return T(env_, handle_);
+  }
 };
 
 struct java_string_t : java_object_t {
   java_string_t() : java_object_t(), utf8_(nullptr) {}
 
   java_string_t(JNIEnv *env, jobject handle) : java_object_t(env, handle), utf8_(nullptr) {}
+
+  java_string_t(JNIEnv *env, const char *value) : java_string_t(env, env->NewStringUTF(value)) {}
+
+  java_string_t(JNIEnv *env, const std::string &value) : java_string_t(env, value.c_str()) {}
 
   java_string_t(java_string_t &&that) {
     swap(that);
@@ -303,6 +319,8 @@ struct java_array_t<bool> : java_primitive_array_t<bool, jboolean> {
 
   java_array_t(JNIEnv *env, jbooleanArray handle) : java_primitive_array_t(env, handle) {}
 
+  java_array_t(JNIEnv *env, int len) : java_array_t(env, env->NewBooleanArray(len)) {}
+
   java_array_t(java_array_t &&that) {
     swap(that);
   }
@@ -344,6 +362,8 @@ struct java_array_t<unsigned char> : java_primitive_array_t<unsigned char, jbyte
   java_array_t() : java_primitive_array_t() {}
 
   java_array_t(JNIEnv *env, jbyteArray handle) : java_primitive_array_t(env, handle) {}
+
+  java_array_t(JNIEnv *env, int len) : java_array_t(env, env->NewByteArray(len)) {}
 
   java_array_t(java_array_t &&that) {
     swap(that);
@@ -387,6 +407,8 @@ struct java_array_t<char> : java_primitive_array_t<char, jchar> {
 
   java_array_t(JNIEnv *env, jcharArray handle) : java_primitive_array_t(env, handle) {}
 
+  java_array_t(JNIEnv *env, int len) : java_array_t(env, env->NewCharArray(len)) {}
+
   java_array_t(java_array_t &&that) {
     swap(that);
   }
@@ -428,6 +450,8 @@ struct java_array_t<short> : java_primitive_array_t<short, jshort> {
   java_array_t() : java_primitive_array_t() {}
 
   java_array_t(JNIEnv *env, jshortArray handle) : java_primitive_array_t(env, handle) {}
+
+  java_array_t(JNIEnv *env, int len) : java_array_t(env, env->NewShortArray(len)) {}
 
   java_array_t(java_array_t &&that) {
     swap(that);
@@ -471,6 +495,8 @@ struct java_array_t<int> : java_primitive_array_t<int, jint> {
 
   java_array_t(JNIEnv *env, jintArray handle) : java_primitive_array_t(env, handle) {}
 
+  java_array_t(JNIEnv *env, int len) : java_array_t(env, env->NewIntArray(len)) {}
+
   java_array_t(java_array_t &&that) {
     swap(that);
   }
@@ -512,6 +538,8 @@ struct java_array_t<long> : java_primitive_array_t<long, jlong> {
   java_array_t() : java_primitive_array_t() {}
 
   java_array_t(JNIEnv *env, jlongArray handle) : java_primitive_array_t(env, handle) {}
+
+  java_array_t(JNIEnv *env, int len) : java_array_t(env, env->NewLongArray(len)) {}
 
   java_array_t(java_array_t &&that) {
     swap(that);
@@ -555,6 +583,8 @@ struct java_array_t<float> : java_primitive_array_t<float, jfloat> {
 
   java_array_t(JNIEnv *env, jfloatArray handle) : java_primitive_array_t(env, handle) {}
 
+  java_array_t(JNIEnv *env, int len) : java_array_t(env, env->NewFloatArray(len)) {}
+
   java_array_t(java_array_t &&that) {
     swap(that);
   }
@@ -597,6 +627,8 @@ struct java_array_t<double> : java_primitive_array_t<double, jdouble> {
 
   java_array_t(JNIEnv *env, jdoubleArray handle) : java_primitive_array_t(env, handle) {}
 
+  java_array_t(JNIEnv *env, int len) : java_array_t(env, env->NewDoubleArray(len)) {}
+
   java_array_t(java_array_t &&that) {
     swap(that);
   }
@@ -633,48 +665,6 @@ protected:
   }
 };
 
-template <typename T>
-struct java_array_t : java_object_t {
-  java_array_t() : java_object_t() {}
-
-  java_array_t(JNIEnv *env, jobjectArray handle) : java_object_t(env, handle) {}
-
-  java_array_t(java_array_t &&that) {
-    swap(that);
-  }
-
-  java_array_t(const java_array_t &) = delete;
-
-  java_array_t &
-  operator=(java_array_t &&that) {
-    swap(that);
-
-    return *this;
-  }
-
-  java_array_t &
-  operator=(const java_array_t &) = delete;
-
-  operator jobjectArray() const {
-    return jobjectArray(handle_);
-  }
-
-  int
-  size() const {
-    return env_->GetArrayLength(jarray(handle_));
-  }
-
-  T
-  get(int i) const {
-    return java_unmarshall_value<T>(env_, env_->GetObjectArrayElement(*this, i));
-  }
-
-  void
-  set(int i, const T &value) const {
-    env_->SetObjectArrayElement(*this, i, java_marshall_value(env_, value));
-  }
-};
-
 struct java_byte_buffer_t : java_object_t {
   java_byte_buffer_t() : java_object_t(), data_(nullptr), size_(0) {}
 
@@ -682,6 +672,9 @@ struct java_byte_buffer_t : java_object_t {
       : java_object_t(env, handle),
         data_(env->GetDirectBufferAddress(handle)),
         size_(env->GetDirectBufferCapacity(handle)) {}
+
+  java_byte_buffer_t(JNIEnv *env, uint8_t *data, size_t len)
+      : java_byte_buffer_t(env, env->NewDirectByteBuffer(data, len)) {}
 
   java_byte_buffer_t(java_byte_buffer_t &&that) {
     swap(that);
@@ -1555,6 +1548,16 @@ struct java_class_t : java_object_t {
 
   java_class_t(JNIEnv *env, jclass clazz) : java_object_t(env, clazz) {}
 
+  java_class_t(JNIEnv *env, const char *name) : java_object_t(env, nullptr) {
+    handle_ = env_->FindClass(name);
+
+    if (handle_ == nullptr) {
+      throw std::invalid_argument("Could not find class with name '" + std::string(name) + "'");
+    }
+  }
+
+  java_class_t(JNIEnv *env, const std::string &name) : java_class_t(env, name.c_str()) {}
+
   java_class_t(java_class_t &&that) {
     swap(that);
   }
@@ -1573,6 +1576,17 @@ struct java_class_t : java_object_t {
 
   operator jclass() const {
     return handle_;
+  }
+
+  template <typename... A>
+  T operator()(A... args) const {
+    auto init = get_method<void(A...)>("<init>");
+
+    jvalue argv[] = {
+      java_marshall_argument_value(env_, args)...
+    };
+
+    return T(env_, env_->NewObjectA(jclass(handle_), init, argv));
   }
 
   template <typename U>
@@ -1663,18 +1677,6 @@ struct java_class_t : java_object_t {
     return get_static_method<U>(name.c_str());
   }
 
-  template <typename... A>
-  T
-  new_object(A... args) {
-    auto ctor = get_method<void(A...)>("<init>");
-
-    jvalue argv[] = {
-      java_marshall_argument_value(env_, args)...
-    };
-
-    return T(env_, env_->NewObjectA(jclass(handle_), ctor, argv));
-  }
-
   template <typename U>
   U
   get(const java_static_field_t<U> &field) const {
@@ -1740,91 +1742,6 @@ struct java_env_t {
     std::swap(detach_, that.detach_);
   }
 
-  template <typename T = java_object_t>
-  java_class_t<T>
-  find_class(const char *name) const {
-    auto clazz = env_->FindClass(name);
-
-    if (clazz == nullptr) {
-      throw std::invalid_argument("Could not find class with name '" + std::string(name) + "'");
-    }
-
-    return java_class_t<T>(env_, clazz);
-  }
-
-  template <typename T = java_object_t>
-  auto
-  find_class(std::string name) const {
-    return find_class<T>(name.c_str());
-  }
-
-  java_global_ref_t
-  new_global_ref(const java_object_t &object) {
-    return java_global_ref_t(env_, env_->NewGlobalRef(object));
-  }
-
-  java_string_t
-  new_string(const char *value) const {
-    return java_string_t(env_, env_->NewStringUTF(value));
-  }
-
-  java_string_t
-  new_string(std::string value) const {
-    return new_string(value.c_str());
-  }
-
-  template <typename T>
-  java_array_t<T>
-  new_array(int len) const;
-
-  template <>
-  java_array_t<bool>
-  new_array(int len) const {
-    return java_array_t<bool>(env_, env_->NewBooleanArray(len));
-  }
-
-  template <>
-  java_array_t<unsigned char>
-  new_array(int len) const {
-    return java_array_t<unsigned char>(env_, env_->NewByteArray(len));
-  }
-
-  template <>
-  java_array_t<char>
-  new_array(int len) const {
-    return java_array_t<char>(env_, env_->NewCharArray(len));
-  }
-
-  template <>
-  java_array_t<short>
-  new_array(int len) const {
-    return java_array_t<short>(env_, env_->NewShortArray(len));
-  }
-
-  template <>
-  java_array_t<int>
-  new_array(int len) const {
-    return java_array_t<int>(env_, env_->NewIntArray(len));
-  }
-
-  template <>
-  java_array_t<long>
-  new_array(int len) const {
-    return java_array_t<long>(env_, env_->NewLongArray(len));
-  }
-
-  template <>
-  java_array_t<float>
-  new_array(int len) const {
-    return java_array_t<float>(env_, env_->NewFloatArray(len));
-  }
-
-  template <>
-  java_array_t<double>
-  new_array(int len) const {
-    return java_array_t<double>(env_, env_->NewDoubleArray(len));
-  }
-
   template <typename T>
   java_array_t<T>
   new_array(int len, const java_class_t<T> &type, const T &initial) const {
@@ -1840,6 +1757,57 @@ private:
   JavaVM *vm_;
   JNIEnv *env_;
   bool detach_;
+};
+
+template <typename T>
+struct java_array_t : java_object_t {
+  java_array_t() : java_object_t() {}
+
+  java_array_t(JNIEnv *env, jobjectArray handle) : java_object_t(env, handle) {}
+
+  java_array_t(JNIEnv *env, int len, jclass type, jobject initial)
+      : java_array_t(env, env->NewObjectArray(len, type, initial)) {}
+
+  java_array_t(JNIEnv *env, int len, jclass type)
+      : java_array_t(env, len, type, nullptr) {}
+
+  java_array_t(JNIEnv *env, int len, const java_class_t<T> &type, const T &initial)
+      : java_array_t(env, type, java_marshall_value(env, initial)) {}
+
+  java_array_t(java_array_t &&that) {
+    swap(that);
+  }
+
+  java_array_t(const java_array_t &) = delete;
+
+  java_array_t &
+  operator=(java_array_t &&that) {
+    swap(that);
+
+    return *this;
+  }
+
+  java_array_t &
+  operator=(const java_array_t &) = delete;
+
+  operator jobjectArray() const {
+    return jobjectArray(handle_);
+  }
+
+  int
+  size() const {
+    return env_->GetArrayLength(jarray(handle_));
+  }
+
+  T
+  get(int i) const {
+    return java_unmarshall_value<T>(env_, env_->GetObjectArrayElement(*this, i));
+  }
+
+  void
+  set(int i, const T &value) const {
+    env_->SetObjectArrayElement(*this, i, java_marshall_value(env_, value));
+  }
 };
 
 struct java_vm_t {
