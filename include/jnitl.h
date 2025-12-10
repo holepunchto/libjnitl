@@ -141,11 +141,11 @@ struct java_object_t : java_value_t {
 
   template <typename... A>
   void
-  apply(const java_method_t<N, void(A...)> &method, A... args) const;
+  apply(const java_method_t<N, void(A...)> &method, const A &...args) const;
 
   template <typename R, typename... A>
   R
-  apply(const java_method_t<N, R(A...)> &method, A... args) const;
+  apply(const java_method_t<N, R(A...)> &method, const A &...args) const;
 
 protected:
   jobject handle_;
@@ -1246,7 +1246,7 @@ struct java_method_invoker_t;
 template <typename... A>
 struct java_method_invoker_t<void(A...)> {
   static void
-  call(JNIEnv *env, jobject receiver, jmethodID method, A... args) {
+  call(JNIEnv *env, jobject receiver, jmethodID method, const A &...args) {
     jvalue argv[] = {
       java_marshall_argument_value(env, args)...
     };
@@ -1255,7 +1255,7 @@ struct java_method_invoker_t<void(A...)> {
   }
 
   static void
-  call(JNIEnv *env, jclass receiver, jmethodID method, A... args) {
+  call(JNIEnv *env, jclass receiver, jmethodID method, const A &...args) {
     jvalue argv[] = {
       java_marshall_argument_value(env, args)...
     };
@@ -1267,7 +1267,7 @@ struct java_method_invoker_t<void(A...)> {
 template <typename... A>
 struct java_method_invoker_t<bool(A...)> {
   static bool
-  call(JNIEnv *env, jobject receiver, jmethodID method, A... args) {
+  call(JNIEnv *env, jobject receiver, jmethodID method, const A &...args) {
     jvalue argv[] = {
       java_marshall_argument_value(env, args)...
     };
@@ -1276,7 +1276,7 @@ struct java_method_invoker_t<bool(A...)> {
   }
 
   static bool
-  call(JNIEnv *env, jclass receiver, jmethodID method, A... args) {
+  call(JNIEnv *env, jclass receiver, jmethodID method, const A &...args) {
     jvalue argv[] = {
       java_marshall_argument_value(env, args)...
     };
@@ -1288,7 +1288,7 @@ struct java_method_invoker_t<bool(A...)> {
 template <typename... A>
 struct java_method_invoker_t<unsigned char(A...)> {
   static unsigned char
-  call(JNIEnv *env, jobject receiver, jmethodID method, A... args) {
+  call(JNIEnv *env, jobject receiver, jmethodID method, const A &...args) {
     jvalue argv[] = {
       java_marshall_argument_value(env, args)...
     };
@@ -1297,7 +1297,7 @@ struct java_method_invoker_t<unsigned char(A...)> {
   }
 
   static unsigned char
-  call(JNIEnv *env, jclass receiver, jmethodID method, A... args) {
+  call(JNIEnv *env, jclass receiver, jmethodID method, const A &...args) {
     jvalue argv[] = {
       java_marshall_argument_value(env, args)...
     };
@@ -1309,7 +1309,7 @@ struct java_method_invoker_t<unsigned char(A...)> {
 template <typename... A>
 struct java_method_invoker_t<char(A...)> {
   static char
-  call(JNIEnv *env, jobject receiver, jmethodID method, A... args) {
+  call(JNIEnv *env, jobject receiver, jmethodID method, const A &...args) {
     jvalue argv[] = {
       java_marshall_argument_value(env, args)...
     };
@@ -1318,7 +1318,7 @@ struct java_method_invoker_t<char(A...)> {
   }
 
   static char
-  call(JNIEnv *env, jclass receiver, jmethodID method, A... args) {
+  call(JNIEnv *env, jclass receiver, jmethodID method, const A &...args) {
     jvalue argv[] = {
       java_marshall_argument_value(env, args)...
     };
@@ -1330,7 +1330,7 @@ struct java_method_invoker_t<char(A...)> {
 template <typename... A>
 struct java_method_invoker_t<short(A...)> {
   static short
-  call(JNIEnv *env, jobject receiver, jmethodID method, A... args) {
+  call(JNIEnv *env, jobject receiver, jmethodID method, const A &...args) {
     jvalue argv[] = {
       java_marshall_argument_value(env, args)...
     };
@@ -1339,7 +1339,7 @@ struct java_method_invoker_t<short(A...)> {
   }
 
   static char
-  call(JNIEnv *env, jclass receiver, jmethodID method, A... args) {
+  call(JNIEnv *env, jclass receiver, jmethodID method, const A &...args) {
     jvalue argv[] = {
       java_marshall_argument_value(env, args)...
     };
@@ -1351,7 +1351,7 @@ struct java_method_invoker_t<short(A...)> {
 template <typename... A>
 struct java_method_invoker_t<int(A...)> {
   static int
-  call(JNIEnv *env, jobject receiver, jmethodID method, A... args) {
+  call(JNIEnv *env, jobject receiver, jmethodID method, const A &...args) {
     jvalue argv[] = {
       java_marshall_argument_value(env, args)...
     };
@@ -1360,7 +1360,7 @@ struct java_method_invoker_t<int(A...)> {
   }
 
   static int
-  call(JNIEnv *env, jclass receiver, jmethodID method, A... args) {
+  call(JNIEnv *env, jclass receiver, jmethodID method, const A &...args) {
     jvalue argv[] = {
       java_marshall_argument_value(env, args)...
     };
@@ -1372,7 +1372,7 @@ struct java_method_invoker_t<int(A...)> {
 template <typename... A>
 struct java_method_invoker_t<long(A...)> {
   static long
-  call(JNIEnv *env, jobject receiver, jmethodID method, A... args) {
+  call(JNIEnv *env, jobject receiver, jmethodID method, const A &...args) {
     jvalue argv[] = {
       java_marshall_argument_value(env, args)...
     };
@@ -1381,7 +1381,7 @@ struct java_method_invoker_t<long(A...)> {
   }
 
   static long
-  call(JNIEnv *env, jclass receiver, jmethodID method, A... args) {
+  call(JNIEnv *env, jclass receiver, jmethodID method, const A &...args) {
     jvalue argv[] = {
       java_marshall_argument_value(env, args)...
     };
@@ -1393,7 +1393,7 @@ struct java_method_invoker_t<long(A...)> {
 template <typename... A>
 struct java_method_invoker_t<float(A...)> {
   static float
-  call(JNIEnv *env, jobject receiver, jmethodID method, A... args) {
+  call(JNIEnv *env, jobject receiver, jmethodID method, const A &...args) {
     jvalue argv[] = {
       java_marshall_argument_value(env, args)...
     };
@@ -1402,7 +1402,7 @@ struct java_method_invoker_t<float(A...)> {
   }
 
   static float
-  call(JNIEnv *env, jclass receiver, jmethodID method, A... args) {
+  call(JNIEnv *env, jclass receiver, jmethodID method, const A &...args) {
     jvalue argv[] = {
       java_marshall_argument_value(env, args)...
     };
@@ -1414,7 +1414,7 @@ struct java_method_invoker_t<float(A...)> {
 template <typename... A>
 struct java_method_invoker_t<double(A...)> {
   static double
-  call(JNIEnv *env, jobject receiver, jmethodID method, A... args) {
+  call(JNIEnv *env, jobject receiver, jmethodID method, const A &...args) {
     jvalue argv[] = {
       java_marshall_argument_value(env, args)...
     };
@@ -1423,7 +1423,7 @@ struct java_method_invoker_t<double(A...)> {
   }
 
   static double
-  call(JNIEnv *env, jclass receiver, jmethodID method, A... args) {
+  call(JNIEnv *env, jclass receiver, jmethodID method, const A &...args) {
     jvalue argv[] = {
       java_marshall_argument_value(env, args)...
     };
@@ -1435,7 +1435,7 @@ struct java_method_invoker_t<double(A...)> {
 template <typename R, typename... A>
 struct java_method_invoker_t<R(A...)> {
   static R
-  call(JNIEnv *env, jobject receiver, jmethodID method, A... args) {
+  call(JNIEnv *env, jobject receiver, jmethodID method, const A &...args) {
     jvalue argv[] = {
       java_marshall_argument_value(env, args)...
     };
@@ -1444,7 +1444,7 @@ struct java_method_invoker_t<R(A...)> {
   }
 
   static R
-  call(JNIEnv *env, jclass receiver, jmethodID method, A... args) {
+  call(JNIEnv *env, jclass receiver, jmethodID method, const A &...args) {
     jvalue argv[] = {
       java_marshall_argument_value(env, args)...
     };
@@ -1483,22 +1483,22 @@ struct java_method_t;
 
 template <java_class_name_t N, typename... A>
 struct java_method_t<N, void(A...)> : java_method_base_t {
-  void call(const java_object_t<N> &receiver, A... args) const {
+  void call(const java_object_t<N> &receiver, const A &...args) const {
     java_method_invoker_t<void(A...)>::call(env_, receiver, id_, args...);
   }
 
-  void operator()(const java_object_t<N> &receiver, A... args) const {
+  void operator()(const java_object_t<N> &receiver, const A &...args) const {
     call(receiver, args...);
   }
 };
 
 template <java_class_name_t N, typename R, typename... A>
 struct java_method_t<N, R(A...)> : java_method_base_t {
-  R call(const java_object_t<N> &receiver, A... args) const {
+  R call(const java_object_t<N> &receiver, const A &...args) const {
     return java_method_invoker_t<R(A...)>::call(env_, receiver, id_, args...);
   }
 
-  R operator()(const java_object_t<N> &receiver, A... args) const {
+  R operator()(const java_object_t<N> &receiver, const A &...args) const {
     return call(receiver, args...);
   }
 };
@@ -1506,14 +1506,14 @@ struct java_method_t<N, R(A...)> : java_method_base_t {
 template <java_class_name_t N>
 template <typename... A>
 void
-java_object_t<N>::apply(const java_method_t<N, void(A...)> &method, A... args) const {
+java_object_t<N>::apply(const java_method_t<N, void(A...)> &method, const A &...args) const {
   method(*this, args...);
 }
 
 template <java_class_name_t N>
 template <typename R, typename... A>
 R
-java_object_t<N>::apply(const java_method_t<N, R(A...)> &method, A... args) const {
+java_object_t<N>::apply(const java_method_t<N, R(A...)> &method, const A &...args) const {
   return method(*this, args...);
 }
 
@@ -1522,22 +1522,22 @@ struct java_static_method_t;
 
 template <typename... A>
 struct java_static_method_t<void(A...)> : java_method_base_t {
-  void call(A... args) const {
+  void call(const A &...args) const {
     java_method_invoker_t<void(A...)>::call(env_, class_, id_, args...);
   }
 
-  void operator()(A... args) const {
+  void operator()(const A &...args) const {
     call(args...);
   }
 };
 
 template <typename R, typename... A>
 struct java_static_method_t<R(A...)> : java_method_base_t {
-  R call(A... args) const {
+  R call(const A &...args) const {
     return java_method_invoker_t<R(A...)>::call(env_, class_, id_, args...);
   }
 
-  R operator()(A... args) const {
+  R operator()(const A &...args) const {
     call(args...);
   }
 };
@@ -1577,7 +1577,7 @@ struct java_class_t : java_object_t<"java/lang/Class"> {
   }
 
   template <typename... A>
-  T operator()(A... args) const {
+  T operator()(const A &...args) const {
     auto init = get_method<void(A...)>("<init>");
 
     jvalue argv[] = {
@@ -1689,13 +1689,13 @@ struct java_class_t : java_object_t<"java/lang/Class"> {
 
   template <typename... A>
   void
-  apply(const java_static_method_t<void(A...)> &method, A... args) const {
+  apply(const java_static_method_t<void(A...)> &method, const A &...args) const {
     method(*this, args...);
   }
 
   template <typename R, typename... A>
   R
-  apply(const java_static_method_t<R(A...)> &method, A... args) const {
+  apply(const java_static_method_t<R(A...)> &method, const A &...args) const {
     return method(*this, args...);
   }
 };
