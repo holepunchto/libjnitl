@@ -1,8 +1,6 @@
 #pragma once
 
 #include <array>
-#include <cstdint>
-#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -103,6 +101,8 @@ struct java_object_t : java_value_t {
   java_object_t() : java_value_t() {}
 
   java_object_t(JNIEnv *env, jobject handle) : java_value_t(env), handle_(handle) {}
+
+  java_object_t(std::nullptr_t) : java_object_t() {}
 
   java_object_t(java_object_t &&that) {
     swap(that);
@@ -925,43 +925,7 @@ java_marshall_value(JNIEnv *env, const T &value) {
 template <typename T>
 static jvalue
 java_marshall_argument_value(JNIEnv *env, const T &value) {
-  using type = typename java_type_info_t<T>::type;
-
-  auto result = java_marshall_value(env, value);
-
-  if constexpr (java_is_same<type, jboolean>) {
-    return jvalue{.z = result};
-  }
-
-  if constexpr (java_is_same<type, jbyte>) {
-    return jvalue{.b = result};
-  }
-
-  if constexpr (java_is_same<type, jchar>) {
-    return jvalue{.c = result};
-  }
-
-  if constexpr (java_is_same<type, jshort>) {
-    return jvalue{.s = result};
-  }
-
-  if constexpr (java_is_same<type, jint>) {
-    return jvalue{.i = result};
-  }
-
-  if constexpr (java_is_same<type, jlong>) {
-    return jvalue{.j = result};
-  }
-
-  if constexpr (java_is_same<type, jfloat>) {
-    return jvalue{.f = result};
-  }
-
-  if constexpr (java_is_same<type, jdouble>) {
-    return jvalue{.d = result};
-  }
-
-  return jvalue{.l = result};
+  return jvalue{.l = reinterpret_cast<jobject>(java_marshall_value(env, value))};
 }
 
 template <typename T>
