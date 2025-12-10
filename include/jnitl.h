@@ -8,6 +8,12 @@
 
 #include <jni.h>
 
+template <typename A, typename B>
+constexpr bool java_is_same = false;
+
+template <typename A>
+constexpr bool java_is_same<A, A> = true;
+
 template <size_t N>
 struct java_string_literal_t {
   constexpr java_string_literal_t(const char (&data)[N]) {
@@ -963,7 +969,43 @@ java_marshall_value(JNIEnv *env, const T &value) {
 template <typename T>
 static jvalue
 java_marshall_argument_value(JNIEnv *env, const T &value) {
-  return reinterpret_cast<jvalue>(java_marshall_value(env, value));
+  using type = typename java_type_info_t<T>::type;
+
+  auto result = java_marshall_value(env, value);
+
+  if constexpr (java_is_same<type, jboolean>) {
+    return jvalue{.z = result};
+  }
+
+  if constexpr (java_is_same<type, jbyte>) {
+    return jvalue{.b = result};
+  }
+
+  if constexpr (java_is_same<type, jchar>) {
+    return jvalue{.c = result};
+  }
+
+  if constexpr (java_is_same<type, jshort>) {
+    return jvalue{.s = result};
+  }
+
+  if constexpr (java_is_same<type, jint>) {
+    return jvalue{.i = result};
+  }
+
+  if constexpr (java_is_same<type, jlong>) {
+    return jvalue{.j = result};
+  }
+
+  if constexpr (java_is_same<type, jfloat>) {
+    return jvalue{.f = result};
+  }
+
+  if constexpr (java_is_same<type, jdouble>) {
+    return jvalue{.d = result};
+  }
+
+  return jvalue{.l = result};
 }
 
 template <typename T>
