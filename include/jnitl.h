@@ -174,7 +174,7 @@ struct java_global_ref_t : java_object_t<N> {
 
   java_global_ref_t &
   operator=(java_global_ref_t &&that) {
-    swap(that);
+    this->swap(that);
 
     return *this;
   }
