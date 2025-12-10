@@ -963,7 +963,7 @@ java_marshall_value(JNIEnv *env, const T &value) {
 template <typename T>
 static jvalue
 java_marshall_argument_value(JNIEnv *env, const T &value) {
-  return jvalue(java_marshall_value(env, value));
+  return reinterpret_cast<jvalue>(java_marshall_value(env, value));
 }
 
 template <typename T>
