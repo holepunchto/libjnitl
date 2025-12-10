@@ -170,7 +170,7 @@ struct java_global_ref_t : java_object_t {
 struct java_string_t : java_object_t {
   java_string_t() : java_object_t(), utf8_(nullptr) {}
 
-  java_string_t(JNIEnv *env, jstring handle) : java_object_t(env, handle), utf8_(nullptr) {}
+  java_string_t(JNIEnv *env, jobject handle) : java_object_t(env, handle), utf8_(nullptr) {}
 
   java_string_t(java_string_t &&that) {
     swap(that);
@@ -753,6 +753,11 @@ private:
 
 template <typename T>
 struct java_type_info_t;
+
+template <>
+struct java_type_info_t<void> {
+  static constexpr java_string_literal_t signature = "V";
+};
 
 template <>
 struct java_type_info_t<bool> {
@@ -1575,7 +1580,7 @@ struct java_class_t : java_object_t {
   get_field(const char *name) const {
     auto signature = java_type_info_t<U>::signature.c_str();
 
-    auto id = env_->GetFieldID(handle_, name, signature);
+    auto id = env_->GetFieldID(jclass(handle_), name, signature);
 
     if (id == nullptr) {
       throw std::invalid_argument(
@@ -1583,7 +1588,7 @@ struct java_class_t : java_object_t {
       );
     }
 
-    return java_field_t<U>(java_field_base_t(env_, handle_, id));
+    return java_field_t<U>(java_field_base_t(env_, jclass(handle_), id));
   }
 
   template <typename U>
@@ -1597,7 +1602,7 @@ struct java_class_t : java_object_t {
   get_static_field(const char *name) const {
     auto signature = java_type_info_t<U>::signature.c_str();
 
-    auto id = env_->GetStaticFieldID(handle_, name, signature);
+    auto id = env_->GetStaticFieldID(jclass(handle_), name, signature);
 
     if (id == nullptr) {
       throw std::invalid_argument(
@@ -1605,7 +1610,7 @@ struct java_class_t : java_object_t {
       );
     }
 
-    return java_static_field_t<U>(java_field_base_t(env_, handle_, id));
+    return java_static_field_t<U>(java_field_base_t(env_, jclass(handle_), id));
   }
 
   template <typename U>
@@ -1619,7 +1624,7 @@ struct java_class_t : java_object_t {
   get_method(const char *name) const {
     auto signature = java_type_info_t<U>::signature.c_str();
 
-    auto id = env_->GetMethodID(handle_, name, signature);
+    auto id = env_->GetMethodID(jclass(handle_), name, signature);
 
     if (id == nullptr) {
       throw std::invalid_argument(
@@ -1627,7 +1632,7 @@ struct java_class_t : java_object_t {
       );
     }
 
-    return java_method_t<U>(java_method_base_t(env_, handle_, id));
+    return java_method_t<U>(java_method_base_t(env_, jclass(handle_), id));
   }
 
   template <typename U>
@@ -1641,7 +1646,7 @@ struct java_class_t : java_object_t {
   get_static_method(const char *name) const {
     auto signature = java_type_info_t<U>::signature.c_str();
 
-    auto id = env_->GetStaticMethodID(handle_, name, signature);
+    auto id = env_->GetStaticMethodID(jclass(handle_), name, signature);
 
     if (id == nullptr) {
       throw std::invalid_argument(
@@ -1649,7 +1654,7 @@ struct java_class_t : java_object_t {
       );
     }
 
-    return java_static_method_t<U>(java_method_base_t(env_, handle_, id));
+    return java_static_method_t<U>(java_method_base_t(env_, jclass(handle_), id));
   }
 
   template <typename U>
@@ -1658,16 +1663,28 @@ struct java_class_t : java_object_t {
     return get_static_method<U>(name.c_str());
   }
 
+  template <typename... A>
+  T
+  new_object(A... args) {
+    auto ctor = get_method<void(A...)>("<init>");
+
+    jvalue argv[] = {
+      java_marshall_argument_value(env_, args)...
+    };
+
+    return T(env_, env_->NewObjectA(jclass(handle_), ctor, argv));
+  }
+
   template <typename U>
   U
   get(const java_static_field_t<U> &field) const {
-    return java_field_accessor_t<U>::get(env_, handle_, field);
+    return java_field_accessor_t<U>::get(env_, jclass(handle_), field);
   }
 
   template <typename U>
   void
   set(const java_static_field_t<U> &field, const U &value) const {
-    java_field_accessor_t<U>::set(env_, handle_, field, value);
+    java_field_accessor_t<U>::set(env_, jclass(handle_), field, value);
   }
 
   template <typename... A>
