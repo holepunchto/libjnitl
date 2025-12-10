@@ -900,6 +900,11 @@ struct java_type_info_t<std::string> {
   static constexpr java_string_literal_t signature = "Ljava/lang/String;";
 
   static auto
+  marshall(JNIEnv *env, const std::string &value) {
+    return env->NewStringUTF(value.c_str());
+  }
+
+  static auto
   unmarshall(JNIEnv *env, const jobject &value) {
     auto chars = env->GetStringUTFChars(jstring(value), nullptr);
 
