@@ -29,7 +29,6 @@ struct java_string_literal_t {
     return data_;
   }
 
-private:
   char data_[N];
   static constexpr size_t size_ = N - 1;
 
@@ -88,13 +87,19 @@ protected:
   JNIEnv *env_;
 };
 
-template <typename T>
+template <size_t N>
+using java_class_name_t = java_string_literal_t<N>;
+
+template <java_class_name_t N, typename T>
 struct java_field_t;
 
-template <typename T>
+template <java_class_name_t N, typename T>
 struct java_method_t;
 
+template <java_class_name_t N>
 struct java_object_t : java_value_t {
+  static constexpr java_class_name_t name = N;
+
   java_object_t() : java_value_t() {}
 
   java_object_t(JNIEnv *env, jobject handle) : java_value_t(env), handle_(handle) {}
@@ -128,34 +133,34 @@ struct java_object_t : java_value_t {
 
   template <typename T>
   T
-  get(const java_field_t<T> &field) const;
+  get(const java_field_t<N, T> &field) const;
 
   template <typename T>
   void
-  set(const java_field_t<T> &field, const T &value) const;
+  set(const java_field_t<N, T> &field, const T &value) const;
 
   template <typename... A>
   void
-  apply(const java_method_t<void(A...)> &method, A... args) const;
+  apply(const java_method_t<N, void(A...)> &method, A... args) const;
 
   template <typename R, typename... A>
   R
-  apply(const java_method_t<R(A...)> &method, A... args) const;
+  apply(const java_method_t<N, R(A...)> &method, A... args) const;
 
 protected:
   jobject handle_;
 
-  template <typename T>
+  template <java_class_name_t T>
   friend struct java_global_ref_t;
 };
 
-template <typename T = java_object_t>
-struct java_global_ref_t : java_object_t {
-  java_global_ref_t() : java_object_t() {}
+template <java_class_name_t N>
+struct java_global_ref_t : java_object_t<N> {
+  java_global_ref_t() : java_object_t<N>() {}
 
-  java_global_ref_t(JNIEnv *env, jobject handle) : java_object_t(env, env->NewGlobalRef(handle)) {}
+  java_global_ref_t(JNIEnv *env, jobject handle) : java_object_t<N>(env, env->NewGlobalRef(handle)) {}
 
-  java_global_ref_t(const T &object) : java_global_ref_t(object.env_, object.handle_) {}
+  java_global_ref_t(const java_object_t<N> &object) : java_global_ref_t(object.env_, object.handle_) {}
 
   java_global_ref_t(java_global_ref_t &&that) {
     swap(that);
@@ -164,7 +169,7 @@ struct java_global_ref_t : java_object_t {
   java_global_ref_t(const java_global_ref_t &) = delete;
 
   ~java_global_ref_t() {
-    if (handle_) env_->DeleteGlobalRef(handle_);
+    if (this->handle_) this->env_->DeleteGlobalRef(this->handle_);
   }
 
   java_global_ref_t &
@@ -176,19 +181,9 @@ struct java_global_ref_t : java_object_t {
 
   java_global_ref_t &
   operator=(const java_global_ref_t &) = delete;
-
-  T &
-  operator*() {
-    return T(env_, handle_);
-  }
-
-  const T &
-  operator*() const {
-    return T(env_, handle_);
-  }
 };
 
-struct java_string_t : java_object_t {
+struct java_string_t : java_object_t<"java/lang/String"> {
   java_string_t() : java_object_t(), utf8_(nullptr) {}
 
   java_string_t(JNIEnv *env, jobject handle) : java_object_t(env, handle), utf8_(nullptr) {}
@@ -248,7 +243,7 @@ private:
 };
 
 template <typename T, typename U>
-struct java_primitive_array_t : java_object_t {
+struct java_primitive_array_t : java_object_t<"java/lang/Object"> {
   java_primitive_array_t() : java_object_t(), elements_(nullptr) {}
 
   java_primitive_array_t(JNIEnv *env, jarray handle) : java_object_t(env, handle), elements_(nullptr) {}
@@ -674,7 +669,7 @@ protected:
   }
 };
 
-struct java_byte_buffer_t : java_object_t {
+struct java_byte_buffer_t : java_object_t<"java/nio/ByteBuffer"> {
   java_byte_buffer_t() : java_object_t(), data_(nullptr), size_(0) {}
 
   java_byte_buffer_t(JNIEnv *env, jobject handle)
@@ -857,89 +852,45 @@ struct java_type_info_t<double> {
   }
 };
 
-template <>
-struct java_type_info_t<java_object_t> {
+template <java_class_name_t N>
+struct java_type_info_t<java_object_t<N>> {
   using type = jobject;
 
-  static constexpr java_string_literal_t signature = "Ljava/lang/Object;";
+  static constexpr java_string_literal_t signature = java_string_literal_t("L") + N + java_string_literal_t(";");
 
   static auto
-  marshall(JNIEnv *env, const java_object_t &value) {
+  marshall(JNIEnv *env, const java_object_t<N> &value) {
     return static_cast<jobject>(value);
   }
 
   static auto
   unmarshall(JNIEnv *env, const jobject &value) {
-    return java_object_t(env, value);
-  }
-};
-
-template <>
-struct java_type_info_t<java_string_t> {
-  using type = jobject;
-
-  static constexpr java_string_literal_t signature = "Ljava/lang/String;";
-
-  static auto
-  marshall(JNIEnv *env, const java_string_t &value) {
-    return static_cast<jobject>(value);
-  }
-
-  static auto
-  unmarshall(JNIEnv *env, const jobject &value) {
-    return java_string_t(env, jstring(value));
-  }
-};
-
-template <>
-struct java_type_info_t<java_byte_buffer_t> {
-  using type = jobject;
-
-  static constexpr java_string_literal_t signature = "Ljava/nio/ByteBuffer;";
-
-  static auto
-  marshall(JNIEnv *env, const java_byte_buffer_t &value) {
-    return static_cast<jobject>(value);
-  }
-
-  static auto
-  unmarshall(JNIEnv *env, const jobject &value) {
-    return java_byte_buffer_t(env, value);
+    return java_object_t<N>(env, value);
   }
 };
 
 template <typename R>
 struct java_type_info_t<R(void)> {
-  static constexpr java_string_literal_t signature =
-    java_string_literal_t("()") +
-    java_type_info_t<R>::signature;
+  static constexpr java_string_literal_t signature = java_string_literal_t("()") + java_type_info_t<R>::signature;
 };
 
 template <typename R, typename... A>
 struct java_type_info_t<R(A...)> {
-  static constexpr java_string_literal_t signature =
-    java_string_literal_t("(") +
-    (java_type_info_t<A>::signature + ...) +
-    java_string_literal_t(")") +
-    java_type_info_t<R>::signature;
+  static constexpr java_string_literal_t signature = java_string_literal_t("(") + (java_type_info_t<A>::signature + ...) + java_string_literal_t(")") + java_type_info_t<R>::signature;
 };
 
 template <typename T>
 struct java_type_info_t<std::vector<T>> {
   using type = jobject;
 
-  static constexpr java_string_literal_t signature =
-    java_string_literal_t("[") +
-    java_type_info_t<T>::signature;
+  static constexpr java_string_literal_t signature = java_string_literal_t("[") + java_type_info_t<T>::signature;
 };
 
 template <typename T, size_t N>
 struct java_type_info_t<std::array<T, N>> {
   using type = jobject;
 
-  static constexpr java_string_literal_t signature =
-    java_string_literal_t("[") +
-    java_type_info_t<T>::signature;
+  static constexpr java_string_literal_t signature = java_string_literal_t("[") + java_type_info_t<T>::signature;
 };
 
 template <>
@@ -1249,20 +1200,20 @@ protected:
   jfieldID id_;
 };
 
-template <typename T>
+template <java_class_name_t N, typename T>
 struct java_field_t : java_field_base_t {
   auto
-  get(const java_object_t &receiver) const {
+  get(const java_object_t<N> &receiver) const {
     return java_field_accessor_t<T>::get(env_, receiver, id_);
   }
 
   void
-  set(const java_object_t &receiver, const T &value) const {
+  set(const java_object_t<N> &receiver, const T &value) const {
     java_field_accessor_t<T>::set(env_, receiver, id_, value);
   }
 };
 
-template <typename T>
+template <java_class_name_t N, typename T>
 struct java_static_field_t : java_field_base_t {
   auto
   get() const {
@@ -1275,15 +1226,17 @@ struct java_static_field_t : java_field_base_t {
   }
 };
 
+template <java_class_name_t N>
 template <typename T>
 T
-java_object_t::get(const java_field_t<T> &field) const {
+java_object_t<N>::get(const java_field_t<N, T> &field) const {
   return field.get(*this);
 }
 
+template <java_class_name_t N>
 template <typename T>
 void
-java_object_t::set(const java_field_t<T> &field, const T &value) const {
+java_object_t<N>::set(const java_field_t<N, T> &field, const T &value) const {
   return field.set(*this, value);
 }
 
@@ -1525,40 +1478,42 @@ protected:
   jmethodID id_;
 };
 
-template <typename T>
+template <java_class_name_t N, typename T>
 struct java_method_t;
 
-template <typename... A>
-struct java_method_t<void(A...)> : java_method_base_t {
-  void call(const java_object_t &receiver, A... args) const {
+template <java_class_name_t N, typename... A>
+struct java_method_t<N, void(A...)> : java_method_base_t {
+  void call(const java_object_t<N> &receiver, A... args) const {
     java_method_invoker_t<void(A...)>::call(env_, receiver, id_, args...);
   }
 
-  void operator()(const java_object_t &receiver, A... args) const {
+  void operator()(const java_object_t<N> &receiver, A... args) const {
     call(receiver, args...);
   }
 };
 
-template <typename R, typename... A>
-struct java_method_t<R(A...)> : java_method_base_t {
-  R call(const java_object_t &receiver, A... args) const {
+template <java_class_name_t N, typename R, typename... A>
+struct java_method_t<N, R(A...)> : java_method_base_t {
+  R call(const java_object_t<N> &receiver, A... args) const {
     return java_method_invoker_t<R(A...)>::call(env_, receiver, id_, args...);
   }
 
-  R operator()(const java_object_t &receiver, A... args) const {
+  R operator()(const java_object_t<N> &receiver, A... args) const {
     return call(receiver, args...);
   }
 };
 
+template <java_class_name_t N>
 template <typename... A>
 void
-java_object_t::apply(const java_method_t<void(A...)> &method, A... args) const {
+java_object_t<N>::apply(const java_method_t<N, void(A...)> &method, A... args) const {
   method(*this, args...);
 }
 
+template <java_class_name_t N>
 template <typename R, typename... A>
 R
-java_object_t::apply(const java_method_t<R(A...)> &method, A... args) const {
+java_object_t<N>::apply(const java_method_t<N, R(A...)> &method, A... args) const {
   return method(*this, args...);
 }
 
@@ -1587,21 +1542,19 @@ struct java_static_method_t<R(A...)> : java_method_base_t {
   }
 };
 
-template <typename T = java_object_t>
-struct java_class_t : java_object_t {
+template <java_class_name_t N, typename T = java_object_t<N>>
+struct java_class_t : java_object_t<"java/lang/Class"> {
   java_class_t() : java_object_t() {}
 
   java_class_t(JNIEnv *env, jclass clazz) : java_object_t(env, clazz) {}
 
-  java_class_t(JNIEnv *env, const char *name) : java_object_t(env, nullptr) {
-    handle_ = env_->FindClass(name);
+  java_class_t(JNIEnv *env) : java_object_t(env, nullptr) {
+    handle_ = env_->FindClass(N);
 
     if (handle_ == nullptr) {
       throw std::invalid_argument("Could not find class with name '" + std::string(name) + "'");
     }
   }
-
-  java_class_t(JNIEnv *env, const std::string &name) : java_class_t(env, name.c_str()) {}
 
   java_class_t(java_class_t &&that) {
     swap(that);
@@ -1635,7 +1588,7 @@ struct java_class_t : java_object_t {
   }
 
   template <typename U>
-  java_field_t<U>
+  java_field_t<N, U>
   get_field(const char *name) const {
     auto signature = java_type_info_t<U>::signature.c_str();
 
@@ -1647,7 +1600,7 @@ struct java_class_t : java_object_t {
       );
     }
 
-    return java_field_t<U>(java_field_base_t(env_, jclass(handle_), id));
+    return java_field_t<N, U>(java_field_base_t(env_, jclass(handle_), id));
   }
 
   template <typename U>
@@ -1657,7 +1610,7 @@ struct java_class_t : java_object_t {
   }
 
   template <typename U>
-  java_static_field_t<U>
+  java_static_field_t<N, U>
   get_static_field(const char *name) const {
     auto signature = java_type_info_t<U>::signature.c_str();
 
@@ -1669,7 +1622,7 @@ struct java_class_t : java_object_t {
       );
     }
 
-    return java_static_field_t<U>(java_field_base_t(env_, jclass(handle_), id));
+    return java_static_field_t<N, U>(java_field_base_t(env_, jclass(handle_), id));
   }
 
   template <typename U>
@@ -1679,7 +1632,7 @@ struct java_class_t : java_object_t {
   }
 
   template <typename U>
-  java_method_t<U>
+  java_method_t<N, U>
   get_method(const char *name) const {
     auto signature = java_type_info_t<U>::signature.c_str();
 
@@ -1691,7 +1644,7 @@ struct java_class_t : java_object_t {
       );
     }
 
-    return java_method_t<U>(java_method_base_t(env_, jclass(handle_), id));
+    return java_method_t<N, U>(java_method_base_t(env_, jclass(handle_), id));
   }
 
   template <typename U>
@@ -1724,13 +1677,13 @@ struct java_class_t : java_object_t {
 
   template <typename U>
   U
-  get(const java_static_field_t<U> &field) const {
+  get(const java_static_field_t<N, U> &field) const {
     return java_field_accessor_t<U>::get(env_, jclass(handle_), field);
   }
 
   template <typename U>
   void
-  set(const java_static_field_t<U> &field, const U &value) const {
+  set(const java_static_field_t<N, U> &field, const U &value) const {
     java_field_accessor_t<U>::set(env_, jclass(handle_), field, value);
   }
 
@@ -1787,17 +1740,6 @@ struct java_env_t {
     std::swap(detach_, that.detach_);
   }
 
-  template <typename T>
-  java_array_t<T>
-  new_array(int len, const java_class_t<T> &type, const T &initial) const {
-    return java_array_t<T>(env_, env_->NewObjectArray(len, type, java_marshall_value(env_, initial)));
-  }
-
-  java_byte_buffer_t
-  new_direct_byte_buffer(uint8_t *data, size_t size) {
-    return java_byte_buffer_t(env_, env_->NewDirectByteBuffer(data, size));
-  }
-
 private:
   JavaVM *vm_;
   JNIEnv *env_;
@@ -1805,7 +1747,7 @@ private:
 };
 
 template <typename T>
-struct java_array_t : java_object_t {
+struct java_array_t : java_object_t<"java/lang/Object"> {
   java_array_t() : java_object_t() {}
 
   java_array_t(JNIEnv *env, jobjectArray handle) : java_object_t(env, handle) {}
@@ -1815,9 +1757,6 @@ struct java_array_t : java_object_t {
 
   java_array_t(JNIEnv *env, int len, jclass type)
       : java_array_t(env, len, type, nullptr) {}
-
-  java_array_t(JNIEnv *env, int len, const java_class_t<T> &type, const T &initial)
-      : java_array_t(env, type, java_marshall_value(env, initial)) {}
 
   java_array_t(java_array_t &&that) {
     swap(that);
