@@ -88,11 +88,14 @@ protected:
 template <size_t N>
 using java_class_name_t = java_string_literal_t<N>;
 
-template <java_class_name_t N, typename T>
+template <java_class_name_t, typename>
 struct java_field_t;
 
-template <java_class_name_t N, typename T>
+template <java_class_name_t, typename>
 struct java_method_t;
+
+template <java_class_name_t, typename>
+struct java_class_t;
 
 template <java_class_name_t N>
 struct java_object_t : java_value_t {
@@ -146,6 +149,12 @@ struct java_object_t : java_value_t {
   template <typename R, typename... A>
   R
   apply(const java_method_t<N, R(A...)> &method, const A &...args) const;
+
+  template <typename T = java_object_t<N>>
+  java_class_t<N, T>
+  get_class() {
+    return java_class_t<N, java_object_t<N>>(env_, env_->GetObjectClass(handle_));
+  }
 
 protected:
   jobject handle_;
@@ -1447,7 +1456,7 @@ protected:
   jmethodID id_;
 };
 
-template <java_class_name_t N, typename T>
+template <java_class_name_t, typename>
 struct java_method_t;
 
 template <java_class_name_t N, typename... A>
