@@ -150,17 +150,17 @@ struct java_object_t : java_value_t {
 protected:
   jobject handle_;
 
-  template <java_class_name_t T>
+  template <typename>
   friend struct java_global_ref_t;
 };
 
-template <java_class_name_t N>
-struct java_global_ref_t : java_object_t<N> {
-  java_global_ref_t() : java_object_t<N>() {}
+template <typename T>
+struct java_global_ref_t : T {
+  java_global_ref_t() : T() {}
 
-  java_global_ref_t(JNIEnv *env, jobject handle) : java_object_t<N>(env, env->NewGlobalRef(handle)) {}
+  java_global_ref_t(JNIEnv *env, jobject handle) : T(env, env->NewGlobalRef(handle)) {}
 
-  java_global_ref_t(const java_object_t<N> &object) : java_global_ref_t(object.env_, object.handle_) {}
+  java_global_ref_t(const T &object) : java_global_ref_t(object.env_, object.handle_) {}
 
   java_global_ref_t(java_global_ref_t &&that) {
     swap(that);
@@ -246,7 +246,7 @@ template <typename T, typename U>
 struct java_primitive_array_t : java_object_t<"java/lang/Object"> {
   java_primitive_array_t() : java_object_t(), elements_(nullptr) {}
 
-  java_primitive_array_t(JNIEnv *env, jarray handle) : java_object_t(env, handle), elements_(nullptr) {}
+  java_primitive_array_t(JNIEnv *env, jobject handle) : java_object_t(env, handle), elements_(nullptr) {}
 
   java_primitive_array_t(java_primitive_array_t &&that) {
     swap(that);
@@ -321,7 +321,7 @@ template <>
 struct java_array_t<bool> : java_primitive_array_t<bool, jboolean> {
   java_array_t() : java_primitive_array_t() {}
 
-  java_array_t(JNIEnv *env, jbooleanArray handle) : java_primitive_array_t(env, handle) {}
+  java_array_t(JNIEnv *env, jobject handle) : java_primitive_array_t(env, handle) {}
 
   java_array_t(JNIEnv *env, int len) : java_array_t(env, env->NewBooleanArray(len)) {}
 
@@ -365,7 +365,7 @@ template <>
 struct java_array_t<unsigned char> : java_primitive_array_t<unsigned char, jbyte> {
   java_array_t() : java_primitive_array_t() {}
 
-  java_array_t(JNIEnv *env, jbyteArray handle) : java_primitive_array_t(env, handle) {}
+  java_array_t(JNIEnv *env, jobject handle) : java_primitive_array_t(env, handle) {}
 
   java_array_t(JNIEnv *env, int len) : java_array_t(env, env->NewByteArray(len)) {}
 
@@ -409,7 +409,7 @@ template <>
 struct java_array_t<char> : java_primitive_array_t<char, jchar> {
   java_array_t() : java_primitive_array_t() {}
 
-  java_array_t(JNIEnv *env, jcharArray handle) : java_primitive_array_t(env, handle) {}
+  java_array_t(JNIEnv *env, jobject handle) : java_primitive_array_t(env, handle) {}
 
   java_array_t(JNIEnv *env, int len) : java_array_t(env, env->NewCharArray(len)) {}
 
@@ -453,7 +453,7 @@ template <>
 struct java_array_t<short> : java_primitive_array_t<short, jshort> {
   java_array_t() : java_primitive_array_t() {}
 
-  java_array_t(JNIEnv *env, jshortArray handle) : java_primitive_array_t(env, handle) {}
+  java_array_t(JNIEnv *env, jobject handle) : java_primitive_array_t(env, handle) {}
 
   java_array_t(JNIEnv *env, int len) : java_array_t(env, env->NewShortArray(len)) {}
 
@@ -497,7 +497,7 @@ template <>
 struct java_array_t<int> : java_primitive_array_t<int, jint> {
   java_array_t() : java_primitive_array_t() {}
 
-  java_array_t(JNIEnv *env, jintArray handle) : java_primitive_array_t(env, handle) {}
+  java_array_t(JNIEnv *env, jobject handle) : java_primitive_array_t(env, handle) {}
 
   java_array_t(JNIEnv *env, int len) : java_array_t(env, env->NewIntArray(len)) {}
 
@@ -541,7 +541,7 @@ template <>
 struct java_array_t<long> : java_primitive_array_t<long, jlong> {
   java_array_t() : java_primitive_array_t() {}
 
-  java_array_t(JNIEnv *env, jlongArray handle) : java_primitive_array_t(env, handle) {}
+  java_array_t(JNIEnv *env, jobject handle) : java_primitive_array_t(env, handle) {}
 
   java_array_t(JNIEnv *env, int len) : java_array_t(env, env->NewLongArray(len)) {}
 
@@ -585,7 +585,7 @@ template <>
 struct java_array_t<float> : java_primitive_array_t<float, jfloat> {
   java_array_t() : java_primitive_array_t() {}
 
-  java_array_t(JNIEnv *env, jfloatArray handle) : java_primitive_array_t(env, handle) {}
+  java_array_t(JNIEnv *env, jobject handle) : java_primitive_array_t(env, handle) {}
 
   java_array_t(JNIEnv *env, int len) : java_array_t(env, env->NewFloatArray(len)) {}
 
@@ -1515,7 +1515,7 @@ template <java_class_name_t N, typename T = java_object_t<N>>
 struct java_class_t : java_object_t<"java/lang/Class"> {
   java_class_t() : java_object_t() {}
 
-  java_class_t(JNIEnv *env, jclass clazz) : java_object_t(env, clazz) {}
+  java_class_t(JNIEnv *env, jobject clazz) : java_object_t(env, clazz) {}
 
   java_class_t(JNIEnv *env) : java_object_t(env, nullptr) {
     handle_ = env_->FindClass(N);
