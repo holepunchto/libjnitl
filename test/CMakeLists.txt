@@ -1,5 +1,10 @@
+if(ANDROID)
+  return()
+endif()
+
 list(APPEND tests
   basic
+  class-loader
 )
 
 foreach(test IN LISTS tests)

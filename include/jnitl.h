@@ -6,37 +6,6 @@
 
 #include <jni.h>
 
-struct jnitl_class_loader_t {
-  JavaVM *vm = nullptr;
-  jobject loader = nullptr;
-  jmethodID load_class = nullptr;
-};
-
-inline jnitl_class_loader_t jnitl__class_loader = {};
-
-inline void
-jnitl_set_class_loader (JNIEnv *env) {
-  env->GetJavaVM(&jnitl__class_loader.vm);
-
-  jclass thread_class = env->FindClass("java/lang/Thread");
-  jmethodID current_thread = env->GetStaticMethodID(thread_class, "currentThread", "()Ljava/lang/Thread;");
-  jobject thread = env->CallStaticObjectMethod(thread_class, current_thread);
-
-  jmethodID get_class_loader = env->GetMethodID(thread_class, "getContextClassLoader", "()Ljava/lang/ClassLoader;");
-  jobject loader = env->CallObjectMethod(thread, get_class_loader);
-
-  jclass loader_class = env->FindClass("java/lang/ClassLoader");
-  jmethodID load_class = env->GetMethodID(loader_class, "loadClass", "(Ljava/lang/String;)Ljava/lang/Class;");
-
-  jnitl__class_loader.loader = env->NewGlobalRef(loader);
-  jnitl__class_loader.load_class = load_class;
-
-  env->DeleteLocalRef(thread);
-  env->DeleteLocalRef(loader);
-  env->DeleteLocalRef(thread_class);
-  env->DeleteLocalRef(loader_class);
-}
-
 template <typename A, typename B>
 constexpr bool java_is_same = false;
 
@@ -909,6 +878,23 @@ struct java_type_info_t<java_object_t<N>> {
   }
 };
 
+template <java_class_name_t N, typename T>
+struct java_type_info_t<java_class_t<N, T>> {
+  using type = jobject;
+
+  static constexpr java_string_literal_t signature = java_string_literal_t("L") + N + java_string_literal_t(";");
+
+  static auto
+  marshall(JNIEnv *env, const java_class_t<N, T> &value) {
+    return static_cast<jobject>(value);
+  }
+
+  static auto
+  unmarshall(JNIEnv *env, const jobject &value) {
+    return java_class_t<N, T>(env, value);
+  }
+};
+
 template <typename R>
 struct java_type_info_t<R(void)> {
   static constexpr java_string_literal_t signature = java_string_literal_t("()") + java_type_info_t<R>::signature;
@@ -942,6 +928,18 @@ struct java_type_info_t<java_array_t<T>> {
   static auto
   marshall(JNIEnv *env, const java_array_t<T> &value) {
     return static_cast<jobject>(value);
+  }
+};
+
+template <>
+struct java_type_info_t<const char *> {
+  using type = jobject;
+
+  static constexpr java_string_literal_t signature = "Ljava/lang/String;";
+
+  static auto
+  marshall(JNIEnv *env, const char *value) {
+    return env->NewStringUTF(value);
   }
 };
 
@@ -1572,21 +1570,9 @@ struct java_class_t : java_object_t<"java/lang/Class"> {
   java_class_t(JNIEnv *env) : java_object_t(env, nullptr) {
     handle_ = env_->FindClass(N);
 
-    if (handle_ == nullptr && jnitl__class_loader.loader != nullptr) {
-      env_->ExceptionClear();
-
-      std::string class_name(N);
-      for (auto &c : class_name) {
-        if (c == '/') c = '.';
-      }
-
-      jstring jname = env_->NewStringUTF(class_name.c_str());
-      handle_ = (jclass) env_->CallObjectMethod(jnitl__class_loader.loader, jnitl__class_loader.load_class, jname);
-      env_->DeleteLocalRef(jname);
-    }
-
     if (handle_ == nullptr) {
       env_->ExceptionClear();
+
       throw std::invalid_argument("Could not find class with name '" + std::string(name) + "'");
     }
   }
@@ -1732,6 +1718,96 @@ struct java_class_t : java_object_t<"java/lang/Class"> {
   R
   apply(const java_static_method_t<R(A...)> &method, const A &...args) const {
     return method(*this, args...);
+  }
+};
+
+struct java_class_loader_t : java_object_t<"java/lang/ClassLoader"> {
+  java_class_loader_t() : java_object_t() {}
+
+  java_class_loader_t(JNIEnv *env, jobject handle) : java_object_t(env, handle) {}
+
+  java_class_loader_t(java_class_loader_t &&that) {
+    swap(that);
+  }
+
+  java_class_loader_t(const java_class_loader_t &) = delete;
+
+  java_class_loader_t &
+  operator=(java_class_loader_t &&that) {
+    swap(that);
+
+    return *this;
+  }
+
+  java_class_loader_t &
+  operator=(const java_class_loader_t &) = delete;
+
+  template <java_class_name_t N, typename T = java_object_t<N>>
+  auto
+  load_class(const char *class_name) {
+    auto class_loader_class = java_class_t<"java/lang/ClassLoader">(env_);
+
+    auto load_class = class_loader_class.get_method<java_class_t<N, T>(const char *)>("loadClass");
+
+    return java_class_t<N, T>(env_, load_class(*this, class_name));
+  }
+
+  template <java_class_name_t N, typename T = java_object_t<N>>
+  auto
+  load_class(const std::string &class_name) {
+    return load_class<N, T>(class_name.c_str());
+  }
+
+  template <java_class_name_t N, typename T = java_object_t<N>>
+  auto
+  load_class() {
+    auto class_name = std::string(N);
+
+    for (auto &c : class_name) {
+      if (c == '/') c = '.';
+    }
+
+    return load_class<N, T>(class_name);
+  }
+};
+
+struct java_thread_t : java_object_t<"java/lang/Thread"> {
+  java_thread_t() : java_object_t() {}
+
+  java_thread_t(JNIEnv *env, jobject handle) : java_object_t(env, handle) {}
+
+  java_thread_t(java_thread_t &&that) {
+    swap(that);
+  }
+
+  java_thread_t(const java_thread_t &) = delete;
+
+  java_thread_t &
+  operator=(java_thread_t &&that) {
+    swap(that);
+
+    return *this;
+  }
+
+  java_thread_t &
+  operator=(const java_thread_t &) = delete;
+
+  auto
+  get_context_class_loader() {
+    auto thread_class = java_class_t<"java/lang/Thread">(env_);
+
+    auto get_context_class_loader = thread_class.get_method<java_object_t<"java/lang/ClassLoader">()>("getContextClassLoader");
+
+    return java_class_loader_t(env_, get_context_class_loader(*this));
+  }
+
+  static auto
+  current_thread(JNIEnv *env) {
+    auto thread_class = java_class_t<"java/lang/Thread">(env);
+
+    auto current_thread = thread_class.get_static_method<java_object_t<"java/lang/Thread">()>("currentThread");
+
+    return java_thread_t(env, current_thread());
   }
 };
 
