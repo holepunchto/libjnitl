@@ -1954,7 +1954,7 @@ struct java_vm_t {
     int err;
 
     JavaVM *vm;
-    int len;
+    jsize len;
     err = JNI_GetCreatedJavaVMs(&vm, 1, &len);
 
     if (err != JNI_OK) return std::nullopt;
