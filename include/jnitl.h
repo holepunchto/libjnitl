@@ -680,6 +680,54 @@ protected:
   }
 };
 
+template <typename T>
+struct java_array_t : java_object_t<"java/lang/Object"> {
+  java_array_t() : java_object_t() {}
+
+  java_array_t(JNIEnv *env, jobjectArray handle) : java_object_t(env, handle) {}
+
+  java_array_t(JNIEnv *env, int len, jclass type, jobject initial)
+      : java_array_t(env, env->NewObjectArray(len, type, initial)) {}
+
+  java_array_t(JNIEnv *env, int len, jclass type)
+      : java_array_t(env, len, type, nullptr) {}
+
+  java_array_t(java_array_t &&that) {
+    swap(that);
+  }
+
+  java_array_t(const java_array_t &) = delete;
+
+  java_array_t &
+  operator=(java_array_t &&that) {
+    swap(that);
+
+    return *this;
+  }
+
+  java_array_t &
+  operator=(const java_array_t &) = delete;
+
+  operator jobjectArray() const {
+    return jobjectArray(handle_);
+  }
+
+  int
+  size() const {
+    return env_->GetArrayLength(jarray(handle_));
+  }
+
+  T
+  get(int i) const {
+    return java_unmarshall_value<T>(env_, env_->GetObjectArrayElement(*this, i));
+  }
+
+  void
+  set(int i, const T &value) const {
+    env_->SetObjectArrayElement(*this, i, java_marshall_value(env_, value));
+  }
+};
+
 struct java_byte_buffer_t : java_object_t<"java/nio/ByteBuffer"> {
   java_byte_buffer_t() : java_object_t(), data_(nullptr), size_(0) {}
 
@@ -1862,54 +1910,6 @@ private:
   JavaVM *vm_;
   JNIEnv *env_;
   bool detach_;
-};
-
-template <typename T>
-struct java_array_t : java_object_t<"java/lang/Object"> {
-  java_array_t() : java_object_t() {}
-
-  java_array_t(JNIEnv *env, jobjectArray handle) : java_object_t(env, handle) {}
-
-  java_array_t(JNIEnv *env, int len, jclass type, jobject initial)
-      : java_array_t(env, env->NewObjectArray(len, type, initial)) {}
-
-  java_array_t(JNIEnv *env, int len, jclass type)
-      : java_array_t(env, len, type, nullptr) {}
-
-  java_array_t(java_array_t &&that) {
-    swap(that);
-  }
-
-  java_array_t(const java_array_t &) = delete;
-
-  java_array_t &
-  operator=(java_array_t &&that) {
-    swap(that);
-
-    return *this;
-  }
-
-  java_array_t &
-  operator=(const java_array_t &) = delete;
-
-  operator jobjectArray() const {
-    return jobjectArray(handle_);
-  }
-
-  int
-  size() const {
-    return env_->GetArrayLength(jarray(handle_));
-  }
-
-  T
-  get(int i) const {
-    return java_unmarshall_value<T>(env_, env_->GetObjectArrayElement(*this, i));
-  }
-
-  void
-  set(int i, const T &value) const {
-    env_->SetObjectArrayElement(*this, i, java_marshall_value(env_, value));
-  }
 };
 
 struct java_vm_t {
