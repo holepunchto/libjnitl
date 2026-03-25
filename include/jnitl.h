@@ -929,6 +929,11 @@ struct java_type_info_t<java_array_t<T>> {
   marshall(JNIEnv *env, const java_array_t<T> &value) {
     return static_cast<jobject>(value);
   }
+
+  static auto
+  unmarshall(JNIEnv *env, const jobjectArray &value) {
+    return java_array_t<T>(env, value);
+  }
 };
 
 template <>
