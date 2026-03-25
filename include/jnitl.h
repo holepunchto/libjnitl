@@ -15,7 +15,7 @@ constexpr bool java_is_same<A, A> = true;
 template <size_t N>
 struct java_string_literal_t {
   constexpr java_string_literal_t(const char (&data)[N]) {
-    std::copy_n(data, N, data_);
+    std::copy(data, data + N, data_);
   }
 
   constexpr operator const char *() const {
