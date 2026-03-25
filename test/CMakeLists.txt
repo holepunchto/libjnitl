@@ -1,4 +1,4 @@
-if(ANDROID)
+if(IOS OR ANDROID)
   return()
 endif()
 
