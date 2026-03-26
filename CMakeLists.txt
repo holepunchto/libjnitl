@@ -35,6 +35,14 @@ target_link_libraries(
     JNI::JNI
 )
 
+if(ANDROID)
+  target_link_libraries(
+    jnitl
+    INTERFACE
+      JNI::NativeHelper
+  )
+endif()
+
 if(PROJECT_IS_TOP_LEVEL)
   enable_testing()
 
