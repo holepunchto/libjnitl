@@ -912,7 +912,7 @@ struct java_type_info_t<long long> {
   static constexpr java_string_literal_t signature = "J";
 
   static auto
-  marshall(JNIEnv *env, long value) {
+  marshall(JNIEnv *env, long long value) {
     return jlong(value);
   }
 };
@@ -936,7 +936,7 @@ struct java_type_info_t<unsigned long long> {
   static constexpr java_string_literal_t signature = "J";
 
   static auto
-  marshall(JNIEnv *env, unsigned long value) {
+  marshall(JNIEnv *env, unsigned long long value) {
     return jlong(value);
   }
 };
