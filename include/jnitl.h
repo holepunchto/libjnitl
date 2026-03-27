@@ -147,8 +147,8 @@ struct java_object_t : java_value_t {
 
   java_object_t &
   operator=(const java_object_t &that) {
-    env_ = that.env_;
-    handle_ = that.env_->NewLocalRef(that.handle_);
+    java_object_t copy(that);
+    swap(copy);
 
     return *this;
   }
@@ -220,8 +220,8 @@ struct java_global_ref_t : T {
 
   java_global_ref_t &
   operator=(const java_global_ref_t &that) {
-    this->env_ = that.env_;
-    this->handle_ = that.env_->NewGlobalRef(that.handle_);
+    java_global_ref_t copy(that);
+    this->swap(copy);
 
     return *this;
   }
@@ -240,7 +240,7 @@ struct java_string_t : java_object_t<"java/lang/String"> {
     swap(that);
   }
 
-  java_string_t(const java_string_t &) = delete;
+  java_string_t(const java_string_t &that) : java_object_t(that), utf8_(nullptr) {}
 
   ~java_string_t() {
     if (utf8_) env_->ReleaseStringUTFChars(jstring(handle_), utf8_);
@@ -254,7 +254,12 @@ struct java_string_t : java_object_t<"java/lang/String"> {
   }
 
   java_string_t &
-  operator=(const java_string_t &) = delete;
+  operator=(const java_string_t &that) {
+    java_string_t copy(that);
+    swap(copy);
+
+    return *this;
+  }
 
   operator jstring() const {
     return jstring(handle_);
@@ -298,7 +303,7 @@ struct java_primitive_array_t : java_object_t<"java/lang/Object"> {
     swap(that);
   }
 
-  java_primitive_array_t(const java_primitive_array_t &) = delete;
+  java_primitive_array_t(const java_primitive_array_t &that) : java_object_t(that), elements_(nullptr) {}
 
   java_primitive_array_t &
   operator=(java_primitive_array_t &&that) {
@@ -308,7 +313,12 @@ struct java_primitive_array_t : java_object_t<"java/lang/Object"> {
   }
 
   java_primitive_array_t &
-  operator=(const java_primitive_array_t &) = delete;
+  operator=(const java_primitive_array_t &that) {
+    java_primitive_array_t copy(that);
+    swap(copy);
+
+    return *this;
+  }
 
   operator T *() const {
     if (elements_ == nullptr) elements_ = get_elements();
@@ -402,7 +412,7 @@ struct java_array_t<bool> : java_primitive_array_t<bool, jboolean> {
     swap(that);
   }
 
-  java_array_t(const java_array_t &) = delete;
+  java_array_t(const java_array_t &that) : java_primitive_array_t(that) {}
 
   ~java_array_t() override {
     if (elements_) release_elements(0);
@@ -416,7 +426,12 @@ struct java_array_t<bool> : java_primitive_array_t<bool, jboolean> {
   }
 
   java_array_t &
-  operator=(const java_array_t &) = delete;
+  operator=(const java_array_t &that) {
+    java_array_t copy(that);
+    swap(copy);
+
+    return *this;
+  }
 
   operator jbooleanArray() const {
     return jbooleanArray(handle_);
@@ -456,7 +471,7 @@ struct java_array_t<unsigned char> : java_primitive_array_t<unsigned char, jbyte
     swap(that);
   }
 
-  java_array_t(const java_array_t &) = delete;
+  java_array_t(const java_array_t &that) : java_primitive_array_t(that) {}
 
   ~java_array_t() override {
     if (elements_) release_elements(0);
@@ -470,7 +485,12 @@ struct java_array_t<unsigned char> : java_primitive_array_t<unsigned char, jbyte
   }
 
   java_array_t &
-  operator=(const java_array_t &) = delete;
+  operator=(const java_array_t &that) {
+    java_array_t copy(that);
+    swap(copy);
+
+    return *this;
+  }
 
   operator jbyteArray() const {
     return jbyteArray(handle_);
@@ -510,7 +530,7 @@ struct java_array_t<char> : java_primitive_array_t<char, jchar> {
     swap(that);
   }
 
-  java_array_t(const java_array_t &) = delete;
+  java_array_t(const java_array_t &that) : java_primitive_array_t(that) {}
 
   ~java_array_t() override {
     if (elements_) release_elements(0);
@@ -524,7 +544,12 @@ struct java_array_t<char> : java_primitive_array_t<char, jchar> {
   }
 
   java_array_t &
-  operator=(const java_array_t &) = delete;
+  operator=(const java_array_t &that) {
+    java_array_t copy(that);
+    swap(copy);
+
+    return *this;
+  }
 
   operator jcharArray() const {
     return jcharArray(handle_);
@@ -564,7 +589,7 @@ struct java_array_t<short> : java_primitive_array_t<short, jshort> {
     swap(that);
   }
 
-  java_array_t(const java_array_t &) = delete;
+  java_array_t(const java_array_t &that) : java_primitive_array_t(that) {}
 
   ~java_array_t() override {
     if (elements_) release_elements(0);
@@ -578,7 +603,12 @@ struct java_array_t<short> : java_primitive_array_t<short, jshort> {
   }
 
   java_array_t &
-  operator=(const java_array_t &) = delete;
+  operator=(const java_array_t &that) {
+    java_array_t copy(that);
+    swap(copy);
+
+    return *this;
+  }
 
   operator jshortArray() const {
     return jshortArray(handle_);
@@ -618,7 +648,7 @@ struct java_array_t<int> : java_primitive_array_t<int, jint> {
     swap(that);
   }
 
-  java_array_t(const java_array_t &) = delete;
+  java_array_t(const java_array_t &that) : java_primitive_array_t(that) {}
 
   ~java_array_t() override {
     if (elements_) release_elements(0);
@@ -632,7 +662,12 @@ struct java_array_t<int> : java_primitive_array_t<int, jint> {
   }
 
   java_array_t &
-  operator=(const java_array_t &) = delete;
+  operator=(const java_array_t &that) {
+    java_array_t copy(that);
+    swap(copy);
+
+    return *this;
+  }
 
   operator jintArray() const {
     return jintArray(handle_);
@@ -672,7 +707,7 @@ struct java_array_t<long> : java_primitive_array_t<long, jlong> {
     swap(that);
   }
 
-  java_array_t(const java_array_t &) = delete;
+  java_array_t(const java_array_t &that) : java_primitive_array_t(that) {}
 
   ~java_array_t() override {
     if (elements_) release_elements(0);
@@ -686,7 +721,12 @@ struct java_array_t<long> : java_primitive_array_t<long, jlong> {
   }
 
   java_array_t &
-  operator=(const java_array_t &) = delete;
+  operator=(const java_array_t &that) {
+    java_array_t copy(that);
+    swap(copy);
+
+    return *this;
+  }
 
   operator jlongArray() const {
     return jlongArray(handle_);
@@ -726,7 +766,7 @@ struct java_array_t<float> : java_primitive_array_t<float, jfloat> {
     swap(that);
   }
 
-  java_array_t(const java_array_t &) = delete;
+  java_array_t(const java_array_t &that) : java_primitive_array_t(that) {}
 
   ~java_array_t() override {
     if (elements_) release_elements(0);
@@ -740,7 +780,12 @@ struct java_array_t<float> : java_primitive_array_t<float, jfloat> {
   }
 
   java_array_t &
-  operator=(const java_array_t &) = delete;
+  operator=(const java_array_t &that) {
+    java_array_t copy(that);
+    swap(copy);
+
+    return *this;
+  }
 
   operator jfloatArray() const {
     return jfloatArray(handle_);
@@ -772,7 +817,7 @@ template <>
 struct java_array_t<double> : java_primitive_array_t<double, jdouble> {
   java_array_t() : java_primitive_array_t() {}
 
-  java_array_t(JNIEnv *env, jdoubleArray handle) : java_primitive_array_t(env, handle) {}
+  java_array_t(JNIEnv *env, jobject handle) : java_primitive_array_t(env, handle) {}
 
   java_array_t(JNIEnv *env, int len) : java_array_t(env, env->NewDoubleArray(len)) {}
 
@@ -780,7 +825,7 @@ struct java_array_t<double> : java_primitive_array_t<double, jdouble> {
     swap(that);
   }
 
-  java_array_t(const java_array_t &) = delete;
+  java_array_t(const java_array_t &that) : java_primitive_array_t(that) {}
 
   ~java_array_t() override {
     if (elements_) release_elements(0);
@@ -794,7 +839,12 @@ struct java_array_t<double> : java_primitive_array_t<double, jdouble> {
   }
 
   java_array_t &
-  operator=(const java_array_t &) = delete;
+  operator=(const java_array_t &that) {
+    java_array_t copy(that);
+    swap(copy);
+
+    return *this;
+  }
 
   operator jdoubleArray() const {
     return jdoubleArray(handle_);
@@ -838,7 +888,7 @@ struct java_array_t : java_object_t<"java/lang/Object"> {
     swap(that);
   }
 
-  java_array_t(const java_array_t &) = delete;
+  java_array_t(const java_array_t &that) : java_object_t(that) {}
 
   java_array_t &
   operator=(java_array_t &&that) {
@@ -848,7 +898,12 @@ struct java_array_t : java_object_t<"java/lang/Object"> {
   }
 
   java_array_t &
-  operator=(const java_array_t &) = delete;
+  operator=(const java_array_t &that) {
+    java_array_t copy(that);
+    swap(copy);
+
+    return *this;
+  }
 
   operator jobjectArray() const {
     return jobjectArray(handle_);
@@ -885,7 +940,7 @@ struct java_byte_buffer_t : java_object_t<"java/nio/ByteBuffer"> {
     swap(that);
   }
 
-  java_byte_buffer_t(const java_byte_buffer_t &) = delete;
+  java_byte_buffer_t(const java_byte_buffer_t &that) : java_object_t(that), data_(that.data_), size_(that.size_) {}
 
   java_byte_buffer_t &
   operator=(java_byte_buffer_t &&that) {
@@ -895,7 +950,12 @@ struct java_byte_buffer_t : java_object_t<"java/nio/ByteBuffer"> {
   }
 
   java_byte_buffer_t &
-  operator=(const java_byte_buffer_t &) = delete;
+  operator=(const java_byte_buffer_t &that) {
+    java_byte_buffer_t copy(that);
+    swap(copy);
+
+    return *this;
+  }
 
   operator jobjectArray() const {
     return jobjectArray(handle_);
@@ -2051,7 +2111,7 @@ struct java_class_t : java_object_t<"java/lang/Class"> {
     swap(that);
   }
 
-  java_class_t(const java_class_t &) = delete;
+  java_class_t(const java_class_t &that) : java_object_t(that) {}
 
   java_class_t &
   operator=(java_class_t &&that) {
@@ -2061,7 +2121,12 @@ struct java_class_t : java_object_t<"java/lang/Class"> {
   }
 
   java_class_t &
-  operator=(const java_class_t &) = delete;
+  operator=(const java_class_t &that) {
+    java_class_t copy(that);
+    swap(copy);
+
+    return *this;
+  }
 
   operator jclass() const {
     return handle_;
@@ -2211,7 +2276,7 @@ struct java_class_loader_t : java_object_t<"java/lang/ClassLoader"> {
     swap(that);
   }
 
-  java_class_loader_t(const java_class_loader_t &) = delete;
+  java_class_loader_t(const java_class_loader_t &that) : java_object_t(that) {}
 
   java_class_loader_t &
   operator=(java_class_loader_t &&that) {
@@ -2221,7 +2286,12 @@ struct java_class_loader_t : java_object_t<"java/lang/ClassLoader"> {
   }
 
   java_class_loader_t &
-  operator=(const java_class_loader_t &) = delete;
+  operator=(const java_class_loader_t &that) {
+    java_class_loader_t copy(that);
+    swap(copy);
+
+    return *this;
+  }
 
   template <java_class_name_t N, typename T = java_object_t<N>>
   auto
@@ -2261,7 +2331,7 @@ struct java_thread_t : java_object_t<"java/lang/Thread"> {
     swap(that);
   }
 
-  java_thread_t(const java_thread_t &) = delete;
+  java_thread_t(const java_thread_t &that) : java_object_t(that) {}
 
   java_thread_t &
   operator=(java_thread_t &&that) {
@@ -2271,7 +2341,12 @@ struct java_thread_t : java_object_t<"java/lang/Thread"> {
   }
 
   java_thread_t &
-  operator=(const java_thread_t &) = delete;
+  operator=(const java_thread_t &that) {
+    java_thread_t copy(that);
+    swap(copy);
+
+    return *this;
+  }
 
   auto
   get_context_class_loader() {
