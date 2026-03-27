@@ -2045,6 +2045,11 @@ struct java_class_t : java_object_t<"java/lang/Class"> {
   register_natives(M... methods) {
     env_->RegisterNatives(jclass(handle_), (JNINativeMethod[]) {methods...}, sizeof...(M));
   }
+
+  void
+  unregister_natives() {
+    env_->UnregisterNatives(jclass(handle_));
+  }
 };
 
 struct java_class_loader_t : java_object_t<"java/lang/ClassLoader"> {
