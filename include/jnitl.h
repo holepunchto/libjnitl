@@ -117,7 +117,7 @@ struct java_object_t : java_value_t {
 
   java_object_t() : java_value_t() {}
 
-  java_object_t(JNIEnv *env, jobject handle) : java_value_t(env), handle_(handle) {}
+  java_object_t(JNIEnv *env, jobject handle) : java_value_t(env), handle_(env->NewLocalRef(handle)) {}
 
   java_object_t(std::nullptr_t) : java_object_t() {}
 
@@ -125,7 +125,7 @@ struct java_object_t : java_value_t {
     swap(that);
   }
 
-  java_object_t(const java_object_t &that) : java_object_t(that.env_, that.env_->NewLocalRef(that.handle_)) {}
+  java_object_t(const java_object_t &that) : java_object_t(that.env_, that.handle_) {}
 
   ~java_object_t() {
     if (handle_) env_->DeleteLocalRef(handle_);
@@ -182,15 +182,15 @@ template <typename T>
 struct java_global_ref_t : T {
   java_global_ref_t() : T() {}
 
-  java_global_ref_t(JNIEnv *env, jobject handle) : T(env, handle) {}
+  java_global_ref_t(JNIEnv *env, jobject handle) : T(env, env->NewGlobalRef(handle)) {}
 
-  java_global_ref_t(const T &object) : java_global_ref_t(object.env_, object.env_->NewGlobalRef(object.handle_)) {}
+  java_global_ref_t(const T &object) : java_global_ref_t(object.env_, object.handle_) {}
 
   java_global_ref_t(java_global_ref_t &&that) {
     swap(that);
   }
 
-  java_global_ref_t(const java_global_ref_t &that) : java_global_ref_t(that.env_, that.env_->NewGlobalRef(that.handle_)) {}
+  java_global_ref_t(const java_global_ref_t &that) : java_global_ref_t(that.env_, that.handle_) {}
 
   ~java_global_ref_t() {
     if (this->handle_) this->env_->DeleteGlobalRef(this->handle_);
