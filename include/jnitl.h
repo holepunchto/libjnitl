@@ -115,6 +115,10 @@ struct java_object_t : java_value_t {
 
   java_object_t(const java_object_t &) = delete;
 
+  ~java_object_t() {
+    if (this->handle_) this->env_->DeleteLocalRef(this->handle_);
+  }
+
   java_object_t &
   operator=(java_object_t &&that) {
     swap(that);
