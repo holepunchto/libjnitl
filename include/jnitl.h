@@ -142,15 +142,15 @@ struct java_object_t : java_value_t {
 
   template <typename T>
   void
-  set(const java_field_t<N, T> &field, const T &value) const;
+  set(const java_field_t<N, T> &field, T value) const;
 
   template <typename... A>
   void
-  apply(const java_method_t<N, void(A...)> &method, const A &...args) const;
+  apply(const java_method_t<N, void(A...)> &method, A... args) const;
 
   template <typename R, typename... A>
   R
-  apply(const java_method_t<N, R(A...)> &method, const A &...args) const;
+  apply(const java_method_t<N, R(A...)> &method, A... args) const;
 
   template <typename T = java_object_t<N>>
   java_class_t<N, T>
@@ -723,7 +723,7 @@ struct java_array_t : java_object_t<"java/lang/Object"> {
   }
 
   void
-  set(int i, const T &value) const {
+  set(int i, T value) const {
     env_->SetObjectArrayElement(*this, i, java_marshall_value(env_, value));
   }
 };
@@ -1023,13 +1023,13 @@ struct java_type_info_t<std::string> {
 
 template <typename T>
 static auto
-java_marshall_value(JNIEnv *env, const T &value) {
+java_marshall_value(JNIEnv *env, T value) {
   return java_type_info_t<T>::marshall(env, value);
 }
 
 template <typename T>
 static jvalue
-java_marshall_argument_value(JNIEnv *env, const T &value) {
+java_marshall_argument_value(JNIEnv *env, T value) {
   return jvalue{.l = reinterpret_cast<jobject>(java_marshall_value(env, value))};
 }
 
@@ -1239,12 +1239,12 @@ struct java_field_accessor_t {
   }
 
   static void
-  set(JNIEnv *env, jobject receiver, jfieldID field, const T &value) {
+  set(JNIEnv *env, jobject receiver, jfieldID field, T value) {
     env->SetObjectField(receiver, field, java_marshall_value(env, value));
   }
 
   static void
-  set(JNIEnv *env, jclass receiver, jfieldID field, const T &value) {
+  set(JNIEnv *env, jclass receiver, jfieldID field, T value) {
     env->SetStaticObjectField(receiver, field, java_marshall_value(value));
   }
 };
@@ -1282,7 +1282,7 @@ struct java_field_t : java_field_base_t {
   }
 
   void
-  set(const java_object_t<N> &receiver, const T &value) const {
+  set(const java_object_t<N> &receiver, T value) const {
     java_field_accessor_t<T>::set(env_, receiver, id_, value);
   }
 };
@@ -1295,7 +1295,7 @@ struct java_static_field_t : java_field_base_t {
   }
 
   void
-  set(const T &value) const {
+  set(T value) const {
     java_field_accessor_t<T>::set(env_, class_, id_, value);
   }
 };
@@ -1310,7 +1310,7 @@ java_object_t<N>::get(const java_field_t<N, T> &field) const {
 template <java_class_name_t N>
 template <typename T>
 void
-java_object_t<N>::set(const java_field_t<N, T> &field, const T &value) const {
+java_object_t<N>::set(const java_field_t<N, T> &field, T value) const {
   return field.set(*this, value);
 }
 
@@ -1320,18 +1320,18 @@ struct java_method_invoker_t;
 template <typename... A>
 struct java_method_invoker_t<void(A...)> {
   static void
-  call(JNIEnv *env, jobject receiver, jmethodID method, const A &...args) {
+  call(JNIEnv *env, jobject receiver, jmethodID method, A... args) {
     jvalue argv[] = {
-      java_marshall_argument_value(env, args)...
+      java_marshall_argument_value(env, std::move(args))...
     };
 
     env->CallVoidMethodA(receiver, method, argv);
   }
 
   static void
-  call(JNIEnv *env, jclass receiver, jmethodID method, const A &...args) {
+  call(JNIEnv *env, jclass receiver, jmethodID method, A... args) {
     jvalue argv[] = {
-      java_marshall_argument_value(env, args)...
+      java_marshall_argument_value(env, std::move(args))...
     };
 
     env->CallStaticVoidMethodA(receiver, method, argv);
@@ -1341,18 +1341,18 @@ struct java_method_invoker_t<void(A...)> {
 template <typename... A>
 struct java_method_invoker_t<bool(A...)> {
   static bool
-  call(JNIEnv *env, jobject receiver, jmethodID method, const A &...args) {
+  call(JNIEnv *env, jobject receiver, jmethodID method, A... args) {
     jvalue argv[] = {
-      java_marshall_argument_value(env, args)...
+      java_marshall_argument_value(env, std::move(args))...
     };
 
     return env->CallBooleanMethodA(receiver, method, argv);
   }
 
   static bool
-  call(JNIEnv *env, jclass receiver, jmethodID method, const A &...args) {
+  call(JNIEnv *env, jclass receiver, jmethodID method, A... args) {
     jvalue argv[] = {
-      java_marshall_argument_value(env, args)...
+      java_marshall_argument_value(env, std::move(args))...
     };
 
     return env->CallStaticBooleanMethodA(receiver, method, argv);
@@ -1362,18 +1362,18 @@ struct java_method_invoker_t<bool(A...)> {
 template <typename... A>
 struct java_method_invoker_t<unsigned char(A...)> {
   static unsigned char
-  call(JNIEnv *env, jobject receiver, jmethodID method, const A &...args) {
+  call(JNIEnv *env, jobject receiver, jmethodID method, A... args) {
     jvalue argv[] = {
-      java_marshall_argument_value(env, args)...
+      java_marshall_argument_value(env, std::move(args))...
     };
 
     return env->CallByteMethodA(receiver, method, argv);
   }
 
   static unsigned char
-  call(JNIEnv *env, jclass receiver, jmethodID method, const A &...args) {
+  call(JNIEnv *env, jclass receiver, jmethodID method, A... args) {
     jvalue argv[] = {
-      java_marshall_argument_value(env, args)...
+      java_marshall_argument_value(env, std::move(args))...
     };
 
     return env->CallStaticByteMethodA(receiver, method, argv);
@@ -1383,18 +1383,18 @@ struct java_method_invoker_t<unsigned char(A...)> {
 template <typename... A>
 struct java_method_invoker_t<char(A...)> {
   static char
-  call(JNIEnv *env, jobject receiver, jmethodID method, const A &...args) {
+  call(JNIEnv *env, jobject receiver, jmethodID method, A... args) {
     jvalue argv[] = {
-      java_marshall_argument_value(env, args)...
+      java_marshall_argument_value(env, std::move(args))...
     };
 
     return env->CallCharMethodA(receiver, method, argv);
   }
 
   static char
-  call(JNIEnv *env, jclass receiver, jmethodID method, const A &...args) {
+  call(JNIEnv *env, jclass receiver, jmethodID method, A... args) {
     jvalue argv[] = {
-      java_marshall_argument_value(env, args)...
+      java_marshall_argument_value(env, std::move(args))...
     };
 
     return env->CallStaticCharMethodA(receiver, method, argv);
@@ -1404,18 +1404,18 @@ struct java_method_invoker_t<char(A...)> {
 template <typename... A>
 struct java_method_invoker_t<short(A...)> {
   static short
-  call(JNIEnv *env, jobject receiver, jmethodID method, const A &...args) {
+  call(JNIEnv *env, jobject receiver, jmethodID method, A... args) {
     jvalue argv[] = {
-      java_marshall_argument_value(env, args)...
+      java_marshall_argument_value(env, std::move(args))...
     };
 
     return env->CallShortMethodA(receiver, method, argv);
   }
 
   static char
-  call(JNIEnv *env, jclass receiver, jmethodID method, const A &...args) {
+  call(JNIEnv *env, jclass receiver, jmethodID method, A... args) {
     jvalue argv[] = {
-      java_marshall_argument_value(env, args)...
+      java_marshall_argument_value(env, std::move(args))...
     };
 
     return env->CallStaticShortMethodA(receiver, method, argv);
@@ -1425,18 +1425,18 @@ struct java_method_invoker_t<short(A...)> {
 template <typename... A>
 struct java_method_invoker_t<int(A...)> {
   static int
-  call(JNIEnv *env, jobject receiver, jmethodID method, const A &...args) {
+  call(JNIEnv *env, jobject receiver, jmethodID method, A... args) {
     jvalue argv[] = {
-      java_marshall_argument_value(env, args)...
+      java_marshall_argument_value(env, std::move(args))...
     };
 
     return env->CallIntMethodA(receiver, method, argv);
   }
 
   static int
-  call(JNIEnv *env, jclass receiver, jmethodID method, const A &...args) {
+  call(JNIEnv *env, jclass receiver, jmethodID method, A... args) {
     jvalue argv[] = {
-      java_marshall_argument_value(env, args)...
+      java_marshall_argument_value(env, std::move(args))...
     };
 
     return env->CallStaticIntMethodA(receiver, method, argv);
@@ -1446,18 +1446,18 @@ struct java_method_invoker_t<int(A...)> {
 template <typename... A>
 struct java_method_invoker_t<long(A...)> {
   static long
-  call(JNIEnv *env, jobject receiver, jmethodID method, const A &...args) {
+  call(JNIEnv *env, jobject receiver, jmethodID method, A... args) {
     jvalue argv[] = {
-      java_marshall_argument_value(env, args)...
+      java_marshall_argument_value(env, std::move(args))...
     };
 
     return env->CallLongMethodA(receiver, method, argv);
   }
 
   static long
-  call(JNIEnv *env, jclass receiver, jmethodID method, const A &...args) {
+  call(JNIEnv *env, jclass receiver, jmethodID method, A... args) {
     jvalue argv[] = {
-      java_marshall_argument_value(env, args)...
+      java_marshall_argument_value(env, std::move(args))...
     };
 
     return env->CallStaticLongMethodA(receiver, method, argv);
@@ -1467,18 +1467,18 @@ struct java_method_invoker_t<long(A...)> {
 template <typename... A>
 struct java_method_invoker_t<float(A...)> {
   static float
-  call(JNIEnv *env, jobject receiver, jmethodID method, const A &...args) {
+  call(JNIEnv *env, jobject receiver, jmethodID method, A... args) {
     jvalue argv[] = {
-      java_marshall_argument_value(env, args)...
+      java_marshall_argument_value(env, std::move(args))...
     };
 
     return env->CallFloatMethodA(receiver, method, argv);
   }
 
   static float
-  call(JNIEnv *env, jclass receiver, jmethodID method, const A &...args) {
+  call(JNIEnv *env, jclass receiver, jmethodID method, A... args) {
     jvalue argv[] = {
-      java_marshall_argument_value(env, args)...
+      java_marshall_argument_value(env, std::move(args))...
     };
 
     return env->CallStaticFloatMethodA(receiver, method, argv);
@@ -1488,18 +1488,18 @@ struct java_method_invoker_t<float(A...)> {
 template <typename... A>
 struct java_method_invoker_t<double(A...)> {
   static double
-  call(JNIEnv *env, jobject receiver, jmethodID method, const A &...args) {
+  call(JNIEnv *env, jobject receiver, jmethodID method, A... args) {
     jvalue argv[] = {
-      java_marshall_argument_value(env, args)...
+      java_marshall_argument_value(env, std::move(args))...
     };
 
     return env->CallDoubleMethodA(receiver, method, argv);
   }
 
   static double
-  call(JNIEnv *env, jclass receiver, jmethodID method, const A &...args) {
+  call(JNIEnv *env, jclass receiver, jmethodID method, A... args) {
     jvalue argv[] = {
-      java_marshall_argument_value(env, args)...
+      java_marshall_argument_value(env, std::move(args))...
     };
 
     return env->CallStaticDoubleMethodA(receiver, method, argv);
@@ -1509,18 +1509,18 @@ struct java_method_invoker_t<double(A...)> {
 template <typename R, typename... A>
 struct java_method_invoker_t<R(A...)> {
   static R
-  call(JNIEnv *env, jobject receiver, jmethodID method, const A &...args) {
+  call(JNIEnv *env, jobject receiver, jmethodID method, A... args) {
     jvalue argv[] = {
-      java_marshall_argument_value(env, args)...
+      java_marshall_argument_value(env, std::move(args))...
     };
 
     return java_unmarshall_value<R>(env, env->CallObjectMethodA(receiver, method, argv));
   }
 
   static R
-  call(JNIEnv *env, jclass receiver, jmethodID method, const A &...args) {
+  call(JNIEnv *env, jclass receiver, jmethodID method, A... args) {
     jvalue argv[] = {
-      java_marshall_argument_value(env, args)...
+      java_marshall_argument_value(env, std::move(args))...
     };
 
     return java_unmarshall_value<R>(env, env->CallStaticObjectMethodA(receiver, method, argv));
@@ -1557,38 +1557,38 @@ struct java_method_t;
 
 template <java_class_name_t N, typename... A>
 struct java_method_t<N, void(A...)> : java_method_base_t {
-  void call(const java_object_t<N> &receiver, const A &...args) const {
-    java_method_invoker_t<void(A...)>::call(env_, receiver, id_, args...);
+  void call(const java_object_t<N> &receiver, A... args) const {
+    java_method_invoker_t<void(A...)>::call(env_, receiver, id_, std::move(args)...);
   }
 
-  void operator()(const java_object_t<N> &receiver, const A &...args) const {
-    call(receiver, args...);
+  void operator()(const java_object_t<N> &receiver, A... args) const {
+    call(receiver, std::move(args)...);
   }
 };
 
 template <java_class_name_t N, typename R, typename... A>
 struct java_method_t<N, R(A...)> : java_method_base_t {
-  R call(const java_object_t<N> &receiver, const A &...args) const {
-    return java_method_invoker_t<R(A...)>::call(env_, receiver, id_, args...);
+  R call(const java_object_t<N> &receiver, A... args) const {
+    return java_method_invoker_t<R(A...)>::call(env_, receiver, id_, std::move(args)...);
   }
 
-  R operator()(const java_object_t<N> &receiver, const A &...args) const {
-    return call(receiver, args...);
+  R operator()(const java_object_t<N> &receiver, A... args) const {
+    return call(receiver, std::move(args)...);
   }
 };
 
 template <java_class_name_t N>
 template <typename... A>
 void
-java_object_t<N>::apply(const java_method_t<N, void(A...)> &method, const A &...args) const {
-  method(*this, args...);
+java_object_t<N>::apply(const java_method_t<N, void(A...)> &method, A... args) const {
+  method(*this, std::move(args)...);
 }
 
 template <java_class_name_t N>
 template <typename R, typename... A>
 R
-java_object_t<N>::apply(const java_method_t<N, R(A...)> &method, const A &...args) const {
-  return method(*this, args...);
+java_object_t<N>::apply(const java_method_t<N, R(A...)> &method, A... args) const {
+  return method(*this, std::move(args)...);
 }
 
 template <typename T>
@@ -1596,23 +1596,23 @@ struct java_static_method_t;
 
 template <typename... A>
 struct java_static_method_t<void(A...)> : java_method_base_t {
-  void call(const A &...args) const {
-    java_method_invoker_t<void(A...)>::call(env_, class_, id_, args...);
+  void call(A... args) const {
+    java_method_invoker_t<void(A...)>::call(env_, class_, id_, std::move(args)...);
   }
 
-  void operator()(const A &...args) const {
-    call(args...);
+  void operator()(A... args) const {
+    call(std::move(args)...);
   }
 };
 
 template <typename R, typename... A>
 struct java_static_method_t<R(A...)> : java_method_base_t {
-  R call(const A &...args) const {
-    return java_method_invoker_t<R(A...)>::call(env_, class_, id_, args...);
+  R call(A... args) const {
+    return java_method_invoker_t<R(A...)>::call(env_, class_, id_, std::move(args)...);
   }
 
-  R operator()(const A &...args) const {
-    return call(args...);
+  R operator()(A... args) const {
+    return call(std::move(args)...);
   }
 };
 
@@ -1653,11 +1653,11 @@ struct java_class_t : java_object_t<"java/lang/Class"> {
   }
 
   template <typename... A>
-  T operator()(const A &...args) const {
+  T operator()(A... args) const {
     auto init = get_method<void(A...)>("<init>");
 
     jvalue argv[] = {
-      java_marshall_argument_value(env_, args)...
+      java_marshall_argument_value(env_, std::move(args))...
     };
 
     return T(env_, env_->NewObjectA(jclass(handle_), init, argv));
@@ -1765,14 +1765,14 @@ struct java_class_t : java_object_t<"java/lang/Class"> {
 
   template <typename... A>
   void
-  apply(const java_static_method_t<void(A...)> &method, const A &...args) const {
-    method(*this, args...);
+  apply(const java_static_method_t<void(A...)> &method, A... args) const {
+    method(*this, std::move(args)...);
   }
 
   template <typename R, typename... A>
   R
-  apply(const java_static_method_t<R(A...)> &method, const A &...args) const {
-    return method(*this, args...);
+  apply(const java_static_method_t<R(A...)> &method, A... args) const {
+    return method(*this, std::move(args)...);
   }
 };
 
