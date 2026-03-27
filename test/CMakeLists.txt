@@ -5,6 +5,7 @@ endif()
 list(APPEND tests
   basic
   class-loader
+  native-method
 )
 
 foreach(test IN LISTS tests)

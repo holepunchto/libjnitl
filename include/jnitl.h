@@ -828,6 +828,8 @@ struct java_type_info_t;
 
 template <>
 struct java_type_info_t<void> {
+  using type = void;
+
   static constexpr java_string_literal_t signature = "V";
 };
 
@@ -1051,9 +1053,207 @@ java_marshall_argument_value(JNIEnv *env, T value) {
 
 template <typename T>
 static auto
-java_unmarshall_value(JNIEnv *env, const typename java_type_info_t<T>::type &value) {
+java_unmarshall_value(JNIEnv *env, typename java_type_info_t<T>::type value) {
   return java_type_info_t<T>::unmarshall(env, value);
 }
+
+struct java_env_t {
+  java_env_t() : vm_(nullptr), env_(nullptr), detach_(false) {}
+
+  java_env_t(JavaVM *vm, JNIEnv *env, bool detach) : vm_(vm), env_(env), detach_(detach) {}
+
+  java_env_t(JNIEnv *env) : vm_(nullptr), env_(env), detach_(false) {
+    env_->GetJavaVM(&vm_);
+  }
+
+  java_env_t(java_env_t &&that) : java_env_t() {
+    swap(that);
+  }
+
+  java_env_t(const java_env_t &) = delete;
+
+  ~java_env_t() {
+    if (detach_) vm_->DetachCurrentThread();
+  }
+
+  java_env_t &
+  operator=(java_env_t &&that) {
+    swap(that);
+
+    return *this;
+  }
+
+  java_env_t &
+  operator=(const java_env_t &) = delete;
+
+  operator JNIEnv *() const {
+    return env_;
+  }
+
+  void
+  swap(java_env_t &that) {
+    std::swap(vm_, that.vm_);
+    std::swap(env_, that.env_);
+    std::swap(detach_, that.detach_);
+  }
+
+private:
+  JavaVM *vm_;
+  JNIEnv *env_;
+  bool detach_;
+};
+
+struct java_vm_t {
+  java_vm_t() : vm_(nullptr), destroy_(false) {}
+
+  java_vm_t(JavaVM *vm, bool destroy) : vm_(vm), destroy_(destroy) {}
+
+  java_vm_t(JavaVM *vm) : vm_(vm), destroy_(false) {}
+
+  java_vm_t(java_vm_t &&that) : java_vm_t() {
+    swap(that);
+  }
+
+  java_vm_t(const java_vm_t &) = delete;
+
+  ~java_vm_t() {
+    if (destroy_) vm_->DestroyJavaVM();
+  }
+
+  java_vm_t &
+  operator=(java_vm_t &&that) {
+    swap(that);
+
+    return *this;
+  }
+
+  java_vm_t &
+  operator=(const java_vm_t &) = delete;
+
+  operator JavaVM *() const {
+    return vm_;
+  }
+
+  void
+  swap(java_vm_t &that) {
+    std::swap(vm_, that.vm_);
+    std::swap(destroy_, that.destroy_);
+  }
+
+  static std::optional<java_vm_t>
+  get_created() {
+    int err;
+
+    JavaVM *vm;
+    jsize len;
+    err = JNI_GetCreatedJavaVMs(&vm, 1, &len);
+
+    if (err != JNI_OK) return std::nullopt;
+
+    return java_vm_t(vm, false);
+  }
+
+  static std::pair<java_vm_t, java_env_t>
+  create(std::vector<std::string> options) {
+    int err;
+
+    std::vector<JavaVMOption> vm_options;
+
+    vm_options.reserve(options.size());
+
+    for (const auto &option : options) {
+      vm_options.push_back({const_cast<char *>(option.c_str())});
+    }
+
+    JavaVMInitArgs vm_args;
+
+    vm_args.version = JNI_VERSION_1_6;
+    vm_args.options = vm_options.data();
+    vm_args.nOptions = vm_options.size();
+    vm_args.ignoreUnrecognized = true;
+
+    JavaVM *vm;
+    JNIEnv *env;
+
+#if defined(__ANDROID__)
+    err = JNI_CreateJavaVM(&vm, &env, &vm_args);
+#else
+    err = JNI_CreateJavaVM(&vm, reinterpret_cast<void **>(&env), reinterpret_cast<void *>(&vm_args));
+#endif
+
+    if (err != JNI_OK) throw std::invalid_argument("Could not create VM");
+
+    return std::pair(java_vm_t(vm, true), java_env_t(vm, env, false));
+  }
+
+  static auto
+  create(std::string options...) {
+    return create(std::vector({options}));
+  }
+
+  static auto
+  create() {
+    return create(std::vector<std::string>());
+  }
+
+  std::optional<java_env_t>
+  get_env() const {
+    int err;
+
+    JNIEnv *env;
+    err = vm_->GetEnv(reinterpret_cast<void **>(&env), JNI_VERSION_1_6);
+
+    if (err != JNI_OK) return std::nullopt;
+
+    return java_env_t(vm_, env, false);
+  }
+
+  java_env_t
+  attach_current_thread() const {
+    int err;
+
+    JNIEnv *env;
+
+#if defined(__ANDROID__)
+    err = vm_->AttachCurrentThread(&env, nullptr);
+#else
+    err = vm_->AttachCurrentThread(reinterpret_cast<void **>(&env), nullptr);
+#endif
+
+    if (err != JNI_OK) throw std::invalid_argument("Could not attach current thread");
+
+    return java_env_t(vm_, env, true);
+  }
+
+private:
+  JavaVM *vm_;
+  bool destroy_;
+};
+
+template <auto fn>
+struct java_callback_t;
+
+template <typename T, typename R, typename... A, R fn(java_env_t, T, A...)>
+struct java_callback_t<fn> {
+  static constexpr java_string_literal_t signature = "(" + (java_type_info_t<A>::signature + ...) + ")" + java_type_info_t<R>::signature;
+
+  static constexpr auto
+  create() {
+    return +[](JNIEnv *env, typename java_type_info_t<T>::type receiver, typename java_type_info_t<A>::type... args) -> typename java_type_info_t<R>::type {
+      return apply(env, receiver, std::move(args)...);
+    };
+  }
+
+  static constexpr auto
+  apply(JNIEnv *env, typename java_type_info_t<T>::type receiver, typename java_type_info_t<A>::type... args) {
+    return java_marshall_value<R>(env, fn(java_env_t(env), java_unmarshall_value<T>(env, std::move(receiver)), java_unmarshall_value<A>(env, std::move(args))...));
+  }
+};
+
+template <auto fn>
+struct java_type_info_t<java_callback_t<fn>> {
+  static constexpr java_string_literal_t signature = java_callback_t<fn>::signature;
+};
 
 template <typename T>
 struct java_field_accessor_t;
@@ -1632,6 +1832,43 @@ struct java_static_method_t<R(A...)> : java_method_base_t {
   }
 };
 
+template <auto fn>
+struct java_native_method_t {
+  java_native_method_t(const char *name) : name_(name) {}
+
+  java_native_method_t(const std::string &name) : name_(name) {}
+
+  java_native_method_t(java_native_method_t &&) = default;
+
+  java_native_method_t(const java_native_method_t &) = delete;
+
+  java_native_method_t &
+  operator=(java_native_method_t &&) = default;
+
+  java_native_method_t &
+  operator=(const java_native_method_t &) = delete;
+
+  operator JNINativeMethod() const {
+    return {
+      .name = const_cast<char *>(name_.c_str()),
+      .signature = const_cast<char *>(java_callback_t<fn>::signature.c_str()),
+      .fnPtr = reinterpret_cast<void *>(java_callback_t<fn>::create()),
+    };
+  }
+
+private:
+  std::string name_;
+};
+
+template <typename T>
+constexpr bool java_is_native_method = false;
+
+template <auto fn>
+constexpr bool java_is_native_method<java_native_method_t<fn>> = true;
+
+template <typename T>
+concept java_native_method = java_is_native_method<T>;
+
 template <java_class_name_t N, typename T = java_object_t<N>>
 struct java_class_t : java_object_t<"java/lang/Class"> {
   java_class_t() : java_object_t() {}
@@ -1790,6 +2027,12 @@ struct java_class_t : java_object_t<"java/lang/Class"> {
   apply(const java_static_method_t<R(A...)> &method, A... args) const {
     return method(*this, std::move(args)...);
   }
+
+  template <java_native_method... M>
+  void
+  register_natives(M... methods) {
+    env_->RegisterNatives(jclass(handle_), (JNINativeMethod[]) {methods...}, sizeof...(M));
+  }
 };
 
 struct java_class_loader_t : java_object_t<"java/lang/ClassLoader"> {
@@ -1880,177 +2123,4 @@ struct java_thread_t : java_object_t<"java/lang/Thread"> {
 
     return java_thread_t(env, current_thread());
   }
-};
-
-struct java_env_t {
-  java_env_t() : vm_(nullptr), env_(nullptr), detach_(false) {}
-
-  java_env_t(JavaVM *vm, JNIEnv *env, bool detach) : vm_(vm), env_(env), detach_(detach) {}
-
-  java_env_t(JNIEnv *env) : vm_(nullptr), env_(env), detach_(false) {
-    env_->GetJavaVM(&vm_);
-  }
-
-  java_env_t(java_env_t &&that) : java_env_t() {
-    swap(that);
-  }
-
-  java_env_t(const java_env_t &) = delete;
-
-  ~java_env_t() {
-    if (detach_) vm_->DetachCurrentThread();
-  }
-
-  java_env_t &
-  operator=(java_env_t &&that) {
-    swap(that);
-
-    return *this;
-  }
-
-  java_env_t &
-  operator=(const java_env_t &) = delete;
-
-  operator JNIEnv *() const {
-    return env_;
-  }
-
-  void
-  swap(java_env_t &that) {
-    std::swap(vm_, that.vm_);
-    std::swap(env_, that.env_);
-    std::swap(detach_, that.detach_);
-  }
-
-private:
-  JavaVM *vm_;
-  JNIEnv *env_;
-  bool detach_;
-};
-
-struct java_vm_t {
-  java_vm_t() : vm_(nullptr), destroy_(false) {}
-
-  java_vm_t(JavaVM *vm, bool destroy) : vm_(vm), destroy_(destroy) {}
-
-  java_vm_t(JavaVM *vm) : vm_(vm), destroy_(false) {}
-
-  java_vm_t(java_vm_t &&that) : java_vm_t() {
-    swap(that);
-  }
-
-  java_vm_t(const java_vm_t &) = delete;
-
-  ~java_vm_t() {
-    if (destroy_) vm_->DestroyJavaVM();
-  }
-
-  java_vm_t &
-  operator=(java_vm_t &&that) {
-    swap(that);
-
-    return *this;
-  }
-
-  java_vm_t &
-  operator=(const java_vm_t &) = delete;
-
-  operator JavaVM *() const {
-    return vm_;
-  }
-
-  void
-  swap(java_vm_t &that) {
-    std::swap(vm_, that.vm_);
-    std::swap(destroy_, that.destroy_);
-  }
-
-  static std::optional<java_vm_t>
-  get_created() {
-    int err;
-
-    JavaVM *vm;
-    jsize len;
-    err = JNI_GetCreatedJavaVMs(&vm, 1, &len);
-
-    if (err != JNI_OK) return std::nullopt;
-
-    return java_vm_t(vm, false);
-  }
-
-  static std::pair<java_vm_t, java_env_t>
-  create(std::vector<std::string> options) {
-    int err;
-
-    std::vector<JavaVMOption> vm_options;
-
-    vm_options.reserve(options.size());
-
-    for (const auto &option : options) {
-      vm_options.push_back({const_cast<char *>(option.c_str())});
-    }
-
-    JavaVMInitArgs vm_args;
-
-    vm_args.version = JNI_VERSION_1_6;
-    vm_args.options = vm_options.data();
-    vm_args.nOptions = vm_options.size();
-    vm_args.ignoreUnrecognized = true;
-
-    JavaVM *vm;
-    JNIEnv *env;
-
-#if defined(__ANDROID__)
-    err = JNI_CreateJavaVM(&vm, &env, &vm_args);
-#else
-    err = JNI_CreateJavaVM(&vm, reinterpret_cast<void **>(&env), reinterpret_cast<void *>(&vm_args));
-#endif
-
-    if (err != JNI_OK) throw std::invalid_argument("Could not create VM");
-
-    return std::pair(java_vm_t(vm, true), java_env_t(vm, env, false));
-  }
-
-  static auto
-  create(std::string options...) {
-    return create(std::vector({options}));
-  }
-
-  static auto
-  create() {
-    return create(std::vector<std::string>());
-  }
-
-  std::optional<java_env_t>
-  get_env() const {
-    int err;
-
-    JNIEnv *env;
-    err = vm_->GetEnv(reinterpret_cast<void **>(&env), JNI_VERSION_1_6);
-
-    if (err != JNI_OK) return std::nullopt;
-
-    return java_env_t(vm_, env, false);
-  }
-
-  java_env_t
-  attach_current_thread() const {
-    int err;
-
-    JNIEnv *env;
-
-#if defined(__ANDROID__)
-    err = vm_->AttachCurrentThread(&env, nullptr);
-#else
-    err = vm_->AttachCurrentThread(reinterpret_cast<void **>(&env), nullptr);
-#endif
-
-    if (err != JNI_OK) throw std::invalid_argument("Could not attach current thread");
-
-    return java_env_t(vm_, env, true);
-  }
-
-private:
-  JavaVM *vm_;
-  bool destroy_;
 };
