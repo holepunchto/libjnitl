@@ -906,6 +906,18 @@ struct java_type_info_t<long> {
 };
 
 template <>
+struct java_type_info_t<long long> {
+  using type = jlong;
+
+  static constexpr java_string_literal_t signature = "J";
+
+  static auto
+  marshall(JNIEnv *env, long value) {
+    return jlong(value);
+  }
+};
+
+template <>
 struct java_type_info_t<unsigned long> {
   using type = jlong;
 
