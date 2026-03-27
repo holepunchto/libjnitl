@@ -77,7 +77,9 @@ struct java_value_t {
     swap(that);
   }
 
-  java_value_t(const java_value_t &) = delete;
+  java_value_t(const java_value_t &that) {
+    env_ = that.env_;
+  }
 
   virtual ~java_value_t() = default;
 
@@ -89,7 +91,11 @@ struct java_value_t {
   }
 
   java_value_t &
-  operator=(const java_value_t &) = delete;
+  operator=(const java_value_t &that) {
+    env_ = that.env_;
+
+    return *this;
+  }
 
   void
   swap(java_value_t &that) {
@@ -126,7 +132,7 @@ struct java_object_t : java_value_t {
     swap(that);
   }
 
-  java_object_t(const java_object_t &) = delete;
+  java_object_t(const java_object_t &that) : java_object_t(that.env_, that.env_->NewLocalRef(that.handle_)) {}
 
   ~java_object_t() {
     if (handle_) env_->DeleteLocalRef(handle_);
@@ -140,7 +146,12 @@ struct java_object_t : java_value_t {
   }
 
   java_object_t &
-  operator=(const java_object_t &) = delete;
+  operator=(const java_object_t &that) {
+    env_ = that.env_;
+    handle_ = that.env_->NewLocalRef(that.handle_);
+
+    return *this;
+  }
 
   operator jobject() const {
     return handle_;
@@ -186,15 +197,15 @@ template <typename T>
 struct java_global_ref_t : T {
   java_global_ref_t() : T() {}
 
-  java_global_ref_t(JNIEnv *env, jobject handle) : T(env, env->NewGlobalRef(handle)) {}
+  java_global_ref_t(JNIEnv *env, jobject handle) : T(env, handle) {}
 
-  java_global_ref_t(const T &object) : java_global_ref_t(object.env_, object.handle_) {}
+  java_global_ref_t(const T &object) : java_global_ref_t(object.env_, object.env_->NewGlobalRef(object.handle_)) {}
 
   java_global_ref_t(java_global_ref_t &&that) {
     swap(that);
   }
 
-  java_global_ref_t(const java_global_ref_t &) = delete;
+  java_global_ref_t(const java_global_ref_t &that) : java_global_ref_t(that.env_, that.env_->NewGlobalRef(that.handle_)) {}
 
   ~java_global_ref_t() {
     if (this->handle_) this->env_->DeleteGlobalRef(this->handle_);
@@ -208,7 +219,12 @@ struct java_global_ref_t : T {
   }
 
   java_global_ref_t &
-  operator=(const java_global_ref_t &) = delete;
+  operator=(const java_global_ref_t &that) {
+    this->env_ = that.env_;
+    this->handle_ = that.env_->NewGlobalRef(that.handle_);
+
+    return *this;
+  }
 };
 
 struct java_string_t : java_object_t<"java/lang/String"> {
