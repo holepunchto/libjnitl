@@ -116,7 +116,7 @@ struct java_object_t : java_value_t {
   java_object_t(const java_object_t &) = delete;
 
   ~java_object_t() {
-    if (this->handle_) this->env_->DeleteLocalRef(this->handle_);
+    if (handle_) env_->DeleteLocalRef(handle_);
   }
 
   java_object_t &
@@ -936,7 +936,7 @@ template <java_class_name_t N, typename T>
 struct java_type_info_t<java_class_t<N, T>> {
   using type = jobject;
 
-  static constexpr java_string_literal_t signature = java_string_literal_t("L") + N + java_string_literal_t(";");
+  static constexpr java_string_literal_t signature = "Ljava/lang/Class;";
 
   static auto
   marshall(JNIEnv *env, const java_class_t<N, T> &value) {
@@ -960,20 +960,6 @@ struct java_type_info_t<R(A...)> {
 };
 
 template <typename T>
-struct java_type_info_t<std::vector<T>> {
-  using type = jobject;
-
-  static constexpr java_string_literal_t signature = java_string_literal_t("[") + java_type_info_t<T>::signature;
-};
-
-template <typename T, size_t N>
-struct java_type_info_t<std::array<T, N>> {
-  using type = jobject;
-
-  static constexpr java_string_literal_t signature = java_string_literal_t("[") + java_type_info_t<T>::signature;
-};
-
-template <typename T>
 struct java_type_info_t<java_array_t<T>> {
   using type = jobject;
 
@@ -988,6 +974,20 @@ struct java_type_info_t<java_array_t<T>> {
   unmarshall(JNIEnv *env, const jobjectArray &value) {
     return java_array_t<T>(env, value);
   }
+};
+
+template <typename T>
+struct java_type_info_t<std::vector<T>> {
+  using type = jobject;
+
+  static constexpr java_string_literal_t signature = java_string_literal_t("[") + java_type_info_t<T>::signature;
+};
+
+template <typename T, size_t N>
+struct java_type_info_t<std::array<T, N>> {
+  using type = jobject;
+
+  static constexpr java_string_literal_t signature = java_string_literal_t("[") + java_type_info_t<T>::signature;
 };
 
 template <>
