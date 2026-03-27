@@ -25,7 +25,7 @@ struct java_string_literal_t {
     return data_;
   }
 
-  constexpr const char *
+  constexpr auto
   c_str() const {
     return data_;
   }
@@ -162,9 +162,15 @@ struct java_object_t : java_value_t {
   apply(const java_method_t<N, R(A...)> &method, A... args) const;
 
   template <typename T = java_object_t<N>>
-  java_class_t<N, T>
+  auto
   get_class() {
     return java_class_t<N, java_object_t<N>>(env_, env_->GetObjectClass(handle_));
+  }
+
+  template <typename T = java_object_t<N>>
+  static auto
+  get_class(JNIEnv *env) {
+    return java_class_t<N, java_object_t<N>>(env);
   }
 
 protected:
@@ -359,7 +365,7 @@ struct java_primitive_array_t : java_object_t<"java/lang/Object"> {
     std::swap(elements_, that.elements_);
   }
 
-  int
+  auto
   size() const {
     return env_->GetArrayLength(jarray(handle_));
   }
@@ -388,7 +394,7 @@ struct java_primitive_array_t : java_object_t<"java/lang/Object"> {
     set_region(start, src.size(), src.data());
   }
 
-  std::vector<T>
+  auto
   slice(size_t start = 0, size_t count = npos) const {
     if (count == npos) count = size() - start;
 
@@ -855,12 +861,12 @@ struct java_array_t : java_object_t<"java/lang/Object"> {
     return jobjectArray(handle_);
   }
 
-  int
+  auto
   size() const {
     return env_->GetArrayLength(jarray(handle_));
   }
 
-  T
+  auto
   get(int i) const {
     return java_unmarshall_value<T>(env_, env_->GetObjectArrayElement(*this, i));
   }
@@ -917,27 +923,27 @@ struct java_byte_buffer_t : java_object_t<"java/nio/ByteBuffer"> {
     std::swap(size_, that.size_);
   }
 
-  uint8_t *
+  auto
   data() const {
     return reinterpret_cast<uint8_t *>(data_);
   }
 
-  size_t
+  auto
   size() const {
     return size_;
   }
 
-  bool
+  auto
   empty() const {
     return size_ == 0;
   }
 
-  uint8_t *
+  auto
   begin() const {
     return reinterpret_cast<uint8_t *>(data_);
   }
 
-  uint8_t *
+  auto
   end() const {
     return reinterpret_cast<uint8_t *>(data_) + size_;
   }
@@ -1368,7 +1374,7 @@ struct java_vm_t {
     return java_env_t(vm_, env, false);
   }
 
-  java_env_t
+  auto
   attach_current_thread() const {
     int err;
 
@@ -2074,7 +2080,7 @@ struct java_class_t : java_object_t<"java/lang/Class"> {
   }
 
   template <typename U>
-  java_field_t<N, U>
+  auto
   get_field(const char *name) const {
     auto signature = java_type_info_t<U>::signature.c_str();
 
@@ -2096,7 +2102,7 @@ struct java_class_t : java_object_t<"java/lang/Class"> {
   }
 
   template <typename U>
-  java_static_field_t<N, U>
+  auto
   get_static_field(const char *name) const {
     auto signature = java_type_info_t<U>::signature.c_str();
 
@@ -2118,7 +2124,7 @@ struct java_class_t : java_object_t<"java/lang/Class"> {
   }
 
   template <typename U>
-  java_method_t<N, U>
+  auto
   get_method(const char *name) const {
     auto signature = java_type_info_t<U>::signature.c_str();
 
@@ -2140,7 +2146,7 @@ struct java_class_t : java_object_t<"java/lang/Class"> {
   }
 
   template <typename U>
-  java_static_method_t<U>
+  auto
   get_static_method(const char *name) const {
     auto signature = java_type_info_t<U>::signature.c_str();
 
@@ -2218,9 +2224,7 @@ struct java_class_loader_t : java_object_t<"java/lang/ClassLoader"> {
   template <java_class_name_t N, typename T = java_object_t<N>>
   auto
   load_class(const char *class_name) {
-    auto class_loader_class = java_class_t<"java/lang/ClassLoader">(env_);
-
-    auto load_class = class_loader_class.get_method<java_class_t<N, T>(const char *)>("loadClass");
+    auto load_class = get_class().get_method<java_class_t<N, T>(const char *)>("loadClass");
 
     return java_class_t<N, T>(env_, load_class(*this, class_name));
   }
@@ -2264,18 +2268,14 @@ struct java_thread_t : java_object_t<"java/lang/Thread"> {
 
   auto
   get_context_class_loader() {
-    auto thread_class = java_class_t<"java/lang/Thread">(env_);
-
-    auto get_context_class_loader = thread_class.get_method<java_object_t<"java/lang/ClassLoader">()>("getContextClassLoader");
+    auto get_context_class_loader = get_class().get_method<java_object_t<"java/lang/ClassLoader">()>("getContextClassLoader");
 
     return java_class_loader_t(env_, get_context_class_loader(*this));
   }
 
   static auto
   current_thread(JNIEnv *env) {
-    auto thread_class = java_class_t<"java/lang/Thread">(env);
-
-    auto current_thread = thread_class.get_static_method<java_object_t<"java/lang/Thread">()>("currentThread");
+    auto current_thread = get_class(env).get_static_method<java_object_t<"java/lang/Thread">()>("currentThread");
 
     return java_thread_t(env, current_thread());
   }

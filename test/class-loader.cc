@@ -9,5 +9,7 @@ main() {
 
   auto class_loader = thread.get_context_class_loader();
 
-  auto string_class = class_loader.load_class<"java/lang/String">();
+  auto ref = java_local_ref_t<java_class_loader_t>(class_loader);
+
+  auto string_class = ref.load_class<"java/lang/String">();
 }
