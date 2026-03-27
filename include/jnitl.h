@@ -171,7 +171,13 @@ protected:
   jobject handle_;
 
   template <typename>
+  friend struct java_local_ref_t;
+
+  template <typename>
   friend struct java_global_ref_t;
+
+  template <typename>
+  friend struct java_weak_local_ref_t;
 };
 
 template <typename T>
