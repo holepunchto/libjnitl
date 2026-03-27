@@ -173,9 +173,7 @@ struct java_object_t : java_value_t {
     return java_class_t<N, java_object_t<N>>(env);
   }
 
-protected:
-  jobject handle_;
-
+private:
   template <typename>
   friend struct java_local_ref_t;
 
@@ -184,6 +182,9 @@ protected:
 
   template <typename>
   friend struct java_weak_local_ref_t;
+
+protected:
+  jobject handle_;
 };
 
 template <typename T>
@@ -2014,6 +2015,7 @@ struct java_native_method_t {
   java_native_method_t &
   operator=(const java_native_method_t &) = delete;
 
+private:
   operator JNINativeMethod() const {
     return {
       .name = const_cast<char *>(name_.c_str()),
@@ -2021,6 +2023,9 @@ struct java_native_method_t {
       .fnPtr = reinterpret_cast<void *>(java_callback_t<fn>::create()),
     };
   }
+
+  template <java_class_name_t, typename>
+  friend struct java_class_t;
 
 private:
   std::string name_;
