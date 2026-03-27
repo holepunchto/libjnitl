@@ -32,27 +32,39 @@ struct java_string_literal_t {
   char data_[N];
   static constexpr size_t size_ = N - 1;
 
-  template <size_t n, size_t m>
+  template <size_t P, size_t Q>
   friend constexpr auto
-  operator+(java_string_literal_t<n> a, java_string_literal_t<m> b);
+  operator+(const java_string_literal_t<P> &a, const java_string_literal_t<Q> &b);
 };
 
-template <size_t n, size_t m>
+template <size_t N, size_t M>
 constexpr auto
-operator+(java_string_literal_t<n> a, java_string_literal_t<m> b) {
-  char result[n + m - 1];
+operator+(const java_string_literal_t<N> &a, const java_string_literal_t<M> &b) {
+  char result[N + M - 1];
 
-  for (size_t i = 0; i < n - 1; i++) {
+  for (size_t i = 0; i < N - 1; i++) {
     result[i] = a.data_[i];
   }
 
-  for (size_t i = 0; i < m - 1; i++) {
-    result[n - 1 + i] = b.data_[i];
+  for (size_t i = 0; i < M - 1; i++) {
+    result[N - 1 + i] = b.data_[i];
   }
 
-  result[n + m - 2] = '\0';
+  result[N + M - 2] = '\0';
 
-  return java_string_literal_t<n + m - 1>(result);
+  return java_string_literal_t<N + M - 1>(result);
+}
+
+template <size_t N, size_t M>
+constexpr auto
+operator+(const char (&a)[N], const java_string_literal_t<M> &b) {
+  return java_string_literal_t<N>(a) + b;
+}
+
+template <size_t N, size_t M>
+constexpr auto
+operator+(const java_string_literal_t<N> &a, const char (&b)[M]) {
+  return a + java_string_literal_t<M>(b);
 }
 
 struct java_value_t {
@@ -919,7 +931,7 @@ template <java_class_name_t N>
 struct java_type_info_t<java_object_t<N>> {
   using type = jobject;
 
-  static constexpr java_string_literal_t signature = java_string_literal_t("L") + N + java_string_literal_t(";");
+  static constexpr java_string_literal_t signature = "L" + N + ";";
 
   static auto
   marshall(JNIEnv *env, const java_object_t<N> &value) {
@@ -951,19 +963,19 @@ struct java_type_info_t<java_class_t<N, T>> {
 
 template <typename R>
 struct java_type_info_t<R(void)> {
-  static constexpr java_string_literal_t signature = java_string_literal_t("()") + java_type_info_t<R>::signature;
+  static constexpr java_string_literal_t signature = "()" + java_type_info_t<R>::signature;
 };
 
 template <typename R, typename... A>
 struct java_type_info_t<R(A...)> {
-  static constexpr java_string_literal_t signature = java_string_literal_t("(") + (java_type_info_t<A>::signature + ...) + java_string_literal_t(")") + java_type_info_t<R>::signature;
+  static constexpr java_string_literal_t signature = "(" + (java_type_info_t<A>::signature + ...) + ")" + java_type_info_t<R>::signature;
 };
 
 template <typename T>
 struct java_type_info_t<java_array_t<T>> {
   using type = jobject;
 
-  static constexpr java_string_literal_t signature = java_string_literal_t("[") + java_type_info_t<T>::signature;
+  static constexpr java_string_literal_t signature = "[" + java_type_info_t<T>::signature;
 
   static auto
   marshall(JNIEnv *env, const java_array_t<T> &value) {
@@ -980,14 +992,14 @@ template <typename T>
 struct java_type_info_t<std::vector<T>> {
   using type = jobject;
 
-  static constexpr java_string_literal_t signature = java_string_literal_t("[") + java_type_info_t<T>::signature;
+  static constexpr java_string_literal_t signature = "[" + java_type_info_t<T>::signature;
 };
 
 template <typename T, size_t N>
 struct java_type_info_t<std::array<T, N>> {
   using type = jobject;
 
-  static constexpr java_string_literal_t signature = java_string_literal_t("[") + java_type_info_t<T>::signature;
+  static constexpr java_string_literal_t signature = "[" + java_type_info_t<T>::signature;
 };
 
 template <>
