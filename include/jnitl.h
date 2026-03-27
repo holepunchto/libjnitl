@@ -175,6 +175,32 @@ protected:
 };
 
 template <typename T>
+struct java_local_ref_t : T {
+  java_local_ref_t() : T() {}
+
+  java_local_ref_t(JNIEnv *env, jobject handle) : T(env, env->NewLocalRef(handle)) {}
+
+  java_local_ref_t(const T &object) : java_local_ref_t(object.env_, object.handle_) {}
+
+  java_local_ref_t(java_local_ref_t &&that) {
+    swap(that);
+  }
+
+  java_local_ref_t(const java_local_ref_t &that) : java_local_ref_t(that.env_, that.handle_) {}
+
+  ~java_local_ref_t() {
+    if (this->handle_) this->env_->DeletelocalRef(this->handle_);
+  }
+
+  java_local_ref_t &
+  operator=(java_local_ref_t that) {
+    this->swap(that);
+
+    return *this;
+  }
+};
+
+template <typename T>
 struct java_global_ref_t : T {
   java_global_ref_t() : T() {}
 
@@ -194,6 +220,32 @@ struct java_global_ref_t : T {
 
   java_global_ref_t &
   operator=(java_global_ref_t that) {
+    this->swap(that);
+
+    return *this;
+  }
+};
+
+template <typename T>
+struct java_weak_global_ref_t : T {
+  java_weak_global_ref_t() : T() {}
+
+  java_weak_global_ref_t(JNIEnv *env, jobject handle) : T(env, env->NewWeakGlobalRef(handle)) {}
+
+  java_weak_global_ref_t(const T &object) : java_weak_global_ref_t(object.env_, object.handle_) {}
+
+  java_weak_global_ref_t(java_weak_global_ref_t &&that) {
+    swap(that);
+  }
+
+  java_weak_global_ref_t(const java_weak_global_ref_t &that) : java_weak_global_ref_t(that.env_, that.handle_) {}
+
+  ~java_weak_global_ref_t() {
+    if (this->handle_) this->env_->DeleteWeakGlobalRef(this->handle_);
+  }
+
+  java_weak_global_ref_t &
+  operator=(java_weak_global_ref_t that) {
     this->swap(that);
 
     return *this;
