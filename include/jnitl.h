@@ -2,6 +2,7 @@
 
 #include <array>
 #include <optional>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -271,6 +272,8 @@ private:
 
 template <typename T, typename U>
 struct java_primitive_array_t : java_object_t<"java/lang/Object"> {
+  static constexpr size_t npos = -1;
+
   java_primitive_array_t() : java_object_t(), elements_(nullptr) {}
 
   java_primitive_array_t(JNIEnv *env, jobject handle) : java_object_t(env, handle), elements_(nullptr) {}
@@ -292,7 +295,7 @@ struct java_primitive_array_t : java_object_t<"java/lang/Object"> {
   operator=(const java_primitive_array_t &) = delete;
 
   operator T *() const {
-    if (elements_ == nullptr) elements_ = get_array_elements();
+    if (elements_ == nullptr) elements_ = get_elements();
 
     return reinterpret_cast<T *>(elements_);
   }
@@ -319,24 +322,51 @@ struct java_primitive_array_t : java_object_t<"java/lang/Object"> {
 
   void
   commit() const {
-    if (elements_) release_array_elements(JNI_COMMIT);
+    if (elements_) release_elements(JNI_COMMIT);
   }
 
   void
   abort() const {
     if (elements_ == nullptr) return;
 
-    release_array_elements(JNI_ABORT);
+    release_elements(JNI_ABORT);
 
     elements_ = nullptr;
   }
 
+  void
+  copy_to(std::span<T> dest, size_t start = 0) const {
+    get_region(start, dest.size(), dest.data());
+  }
+
+  void
+  copy_from(std::span<const T> src, size_t start = 0) {
+    set_region(start, src.size(), src.data());
+  }
+
+  std::vector<T>
+  slice(size_t start = 0, size_t count = npos) const {
+    if (count == npos) count = size() - start;
+
+    std::vector<T> result(count);
+
+    copy_to(result, start);
+
+    return result;
+  }
+
 protected:
   virtual U *
-  get_array_elements() const = 0;
+  get_elements() const = 0;
 
   virtual void
-  release_array_elements(int mode) const = 0;
+  release_elements(int mode) const = 0;
+
+  virtual void
+  get_region(size_t start, size_t len, U *dest) const = 0;
+
+  virtual void
+  set_region(size_t start, size_t len, const U *src) = 0;
 
   mutable U *elements_;
 };
@@ -359,7 +389,7 @@ struct java_array_t<bool> : java_primitive_array_t<bool, jboolean> {
   java_array_t(const java_array_t &) = delete;
 
   ~java_array_t() override {
-    if (elements_) release_array_elements(0);
+    if (elements_) release_elements(0);
   }
 
   java_array_t &
@@ -378,13 +408,23 @@ struct java_array_t<bool> : java_primitive_array_t<bool, jboolean> {
 
 protected:
   jboolean *
-  get_array_elements() const override {
+  get_elements() const override {
     return env_->GetBooleanArrayElements(*this, nullptr);
   }
 
   void
-  release_array_elements(int mode) const override {
+  release_elements(int mode) const override {
     env_->ReleaseBooleanArrayElements(*this, elements_, mode);
+  }
+
+  void
+  get_region(size_t start, size_t len, jboolean *dest) const override {
+    env_->GetBooleanArrayRegion(*this, start, len, dest);
+  }
+
+  void
+  set_region(size_t start, size_t len, const jboolean *src) override {
+    env_->SetBooleanArrayRegion(*this, start, len, src);
   }
 };
 
@@ -403,7 +443,7 @@ struct java_array_t<unsigned char> : java_primitive_array_t<unsigned char, jbyte
   java_array_t(const java_array_t &) = delete;
 
   ~java_array_t() override {
-    if (elements_) release_array_elements(0);
+    if (elements_) release_elements(0);
   }
 
   java_array_t &
@@ -422,13 +462,23 @@ struct java_array_t<unsigned char> : java_primitive_array_t<unsigned char, jbyte
 
 protected:
   jbyte *
-  get_array_elements() const override {
+  get_elements() const override {
     return env_->GetByteArrayElements(*this, nullptr);
   }
 
   void
-  release_array_elements(int mode) const override {
+  release_elements(int mode) const override {
     env_->ReleaseByteArrayElements(*this, elements_, mode);
+  }
+
+  void
+  get_region(size_t start, size_t len, jbyte *dest) const override {
+    env_->GetByteArrayRegion(*this, start, len, dest);
+  }
+
+  void
+  set_region(size_t start, size_t len, const jbyte *src) override {
+    env_->SetByteArrayRegion(*this, start, len, src);
   }
 };
 
@@ -447,7 +497,7 @@ struct java_array_t<char> : java_primitive_array_t<char, jchar> {
   java_array_t(const java_array_t &) = delete;
 
   ~java_array_t() override {
-    if (elements_) release_array_elements(0);
+    if (elements_) release_elements(0);
   }
 
   java_array_t &
@@ -466,13 +516,23 @@ struct java_array_t<char> : java_primitive_array_t<char, jchar> {
 
 protected:
   jchar *
-  get_array_elements() const override {
+  get_elements() const override {
     return env_->GetCharArrayElements(*this, nullptr);
   }
 
   void
-  release_array_elements(int mode) const override {
+  release_elements(int mode) const override {
     env_->ReleaseCharArrayElements(*this, elements_, mode);
+  }
+
+  void
+  get_region(size_t start, size_t len, jchar *dest) const override {
+    env_->GetCharArrayRegion(*this, start, len, dest);
+  }
+
+  void
+  set_region(size_t start, size_t len, const jchar *src) override {
+    env_->SetCharArrayRegion(*this, start, len, src);
   }
 };
 
@@ -491,7 +551,7 @@ struct java_array_t<short> : java_primitive_array_t<short, jshort> {
   java_array_t(const java_array_t &) = delete;
 
   ~java_array_t() override {
-    if (elements_) release_array_elements(0);
+    if (elements_) release_elements(0);
   }
 
   java_array_t &
@@ -510,13 +570,23 @@ struct java_array_t<short> : java_primitive_array_t<short, jshort> {
 
 protected:
   jshort *
-  get_array_elements() const override {
+  get_elements() const override {
     return env_->GetShortArrayElements(*this, nullptr);
   }
 
   void
-  release_array_elements(int mode) const override {
+  release_elements(int mode) const override {
     env_->ReleaseShortArrayElements(*this, elements_, mode);
+  }
+
+  void
+  get_region(size_t start, size_t len, jshort *dest) const override {
+    env_->GetShortArrayRegion(*this, start, len, dest);
+  }
+
+  void
+  set_region(size_t start, size_t len, const jshort *src) override {
+    env_->SetShortArrayRegion(*this, start, len, src);
   }
 };
 
@@ -535,7 +605,7 @@ struct java_array_t<int> : java_primitive_array_t<int, jint> {
   java_array_t(const java_array_t &) = delete;
 
   ~java_array_t() override {
-    if (elements_) release_array_elements(0);
+    if (elements_) release_elements(0);
   }
 
   java_array_t &
@@ -554,13 +624,23 @@ struct java_array_t<int> : java_primitive_array_t<int, jint> {
 
 protected:
   jint *
-  get_array_elements() const override {
+  get_elements() const override {
     return env_->GetIntArrayElements(*this, nullptr);
   }
 
   void
-  release_array_elements(int mode) const override {
+  release_elements(int mode) const override {
     env_->ReleaseIntArrayElements(*this, elements_, mode);
+  }
+
+  void
+  get_region(size_t start, size_t len, jint *dest) const override {
+    env_->GetIntArrayRegion(*this, start, len, dest);
+  }
+
+  void
+  set_region(size_t start, size_t len, const jint *src) override {
+    env_->SetIntArrayRegion(*this, start, len, src);
   }
 };
 
@@ -579,7 +659,7 @@ struct java_array_t<long> : java_primitive_array_t<long, jlong> {
   java_array_t(const java_array_t &) = delete;
 
   ~java_array_t() override {
-    if (elements_) release_array_elements(0);
+    if (elements_) release_elements(0);
   }
 
   java_array_t &
@@ -598,13 +678,23 @@ struct java_array_t<long> : java_primitive_array_t<long, jlong> {
 
 protected:
   jlong *
-  get_array_elements() const override {
+  get_elements() const override {
     return env_->GetLongArrayElements(*this, nullptr);
   }
 
   void
-  release_array_elements(int mode) const override {
+  release_elements(int mode) const override {
     env_->ReleaseLongArrayElements(*this, elements_, mode);
+  }
+
+  void
+  get_region(size_t start, size_t len, jlong *dest) const override {
+    env_->GetLongArrayRegion(*this, start, len, dest);
+  }
+
+  void
+  set_region(size_t start, size_t len, const jlong *src) override {
+    env_->SetLongArrayRegion(*this, start, len, src);
   }
 };
 
@@ -623,7 +713,7 @@ struct java_array_t<float> : java_primitive_array_t<float, jfloat> {
   java_array_t(const java_array_t &) = delete;
 
   ~java_array_t() override {
-    if (elements_) release_array_elements(0);
+    if (elements_) release_elements(0);
   }
 
   java_array_t &
@@ -642,13 +732,23 @@ struct java_array_t<float> : java_primitive_array_t<float, jfloat> {
 
 protected:
   jfloat *
-  get_array_elements() const override {
+  get_elements() const override {
     return env_->GetFloatArrayElements(*this, nullptr);
   }
 
   void
-  release_array_elements(int mode) const override {
+  release_elements(int mode) const override {
     env_->ReleaseFloatArrayElements(*this, elements_, mode);
+  }
+
+  void
+  get_region(size_t start, size_t len, jfloat *dest) const override {
+    env_->GetFloatArrayRegion(*this, start, len, dest);
+  }
+
+  void
+  set_region(size_t start, size_t len, const jfloat *src) override {
+    env_->SetFloatArrayRegion(*this, start, len, src);
   }
 };
 
@@ -667,7 +767,7 @@ struct java_array_t<double> : java_primitive_array_t<double, jdouble> {
   java_array_t(const java_array_t &) = delete;
 
   ~java_array_t() override {
-    if (elements_) release_array_elements(0);
+    if (elements_) release_elements(0);
   }
 
   java_array_t &
@@ -686,13 +786,23 @@ struct java_array_t<double> : java_primitive_array_t<double, jdouble> {
 
 protected:
   jdouble *
-  get_array_elements() const override {
+  get_elements() const override {
     return env_->GetDoubleArrayElements(*this, nullptr);
   }
 
   void
-  release_array_elements(int mode) const override {
+  release_elements(int mode) const override {
     env_->ReleaseDoubleArrayElements(*this, elements_, mode);
+  }
+
+  void
+  get_region(size_t start, size_t len, jdouble *dest) const override {
+    env_->GetDoubleArrayRegion(*this, start, len, dest);
+  }
+
+  void
+  set_region(size_t start, size_t len, const jdouble *src) override {
+    env_->SetDoubleArrayRegion(*this, start, len, src);
   }
 };
 
