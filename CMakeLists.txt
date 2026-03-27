@@ -5,6 +5,8 @@ find_package(cmake-java REQUIRED PATHS node_modules/cmake-java)
 
 project(jnitl C CXX)
 
+use_java()
+
 add_library(jnitl INTERFACE)
 
 set_target_properties(
