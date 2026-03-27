@@ -189,7 +189,7 @@ struct java_local_ref_t : T {
   java_local_ref_t(const java_local_ref_t &that) : java_local_ref_t(that.env_, that.handle_) {}
 
   ~java_local_ref_t() {
-    if (this->handle_) this->env_->DeletelocalRef(this->handle_);
+    if (this->handle_) this->env_->DeleteLocalRef(this->handle_);
   }
 
   java_local_ref_t &
