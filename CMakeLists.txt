@@ -1,9 +1,9 @@
 cmake_minimum_required(VERSION 4.0)
 
-project(jnitl C CXX)
-
 find_package(cmake-fetch REQUIRED PATHS node_modules/cmake-fetch)
 find_package(cmake-java REQUIRED PATHS node_modules/cmake-java)
+
+project(jnitl C CXX)
 
 add_library(jnitl INTERFACE)
 

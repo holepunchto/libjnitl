@@ -11,10 +11,8 @@
     "url": "https://github.com/holepunchto/libjnitl/issues"
   },
   "homepage": "https://github.com/holepunchto/libjnitl#readme",
-  "dependencies": {
-    "cmake-java": "^0.1.0"
-  },
   "devDependencies": {
+    "cmake-java": "^0.1.0",
     "cmake-fetch": "^1.4.1"
   }
 }
