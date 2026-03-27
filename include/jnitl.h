@@ -115,9 +115,9 @@ template <java_class_name_t N>
 struct java_object_t : java_value_t {
   static constexpr java_class_name_t name = N;
 
-  java_object_t() : java_value_t() {}
+  java_object_t() : java_value_t(), handle_(nullptr) {}
 
-  java_object_t(JNIEnv *env, jobject handle) : java_value_t(env), handle_(env->NewLocalRef(handle)) {}
+  java_object_t(JNIEnv *env, jobject handle) : java_value_t(env), handle_(handle) {}
 
   java_object_t(std::nullptr_t) : java_object_t() {}
 
@@ -126,10 +126,6 @@ struct java_object_t : java_value_t {
   }
 
   java_object_t(const java_object_t &that) : java_object_t(that.env_, that.handle_) {}
-
-  ~java_object_t() {
-    if (handle_) env_->DeleteLocalRef(handle_);
-  }
 
   java_object_t &
   operator=(java_object_t that) {
