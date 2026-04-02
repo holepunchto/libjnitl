@@ -1225,7 +1225,7 @@ struct java_type_info_t<java_array_t<T>> {
   }
 
   static auto
-  unmarshall(JNIEnv *env, const jobjectArray &value) {
+  unmarshall(JNIEnv *env, jobject value) {
     return java_array_t<T>(env, value);
   }
 };
@@ -1486,7 +1486,11 @@ struct java_callback_t<fn> {
 
   static constexpr auto
   apply(JNIEnv *env, typename java_type_info_t<T>::type receiver, typename java_type_info_t<A>::type... args) {
-    return java_marshall_value<R>(env, fn(java_env_t(env), java_unmarshall_value<T>(env, std::move(receiver)), java_unmarshall_value<A>(env, std::move(args))...));
+    if constexpr (std::is_void_v<R>) {
+      fn(java_env_t(env), java_unmarshall_value<T>(env, std::move(receiver)), java_unmarshall_value<A>(env, std::move(args))...);
+    } else {
+      return java_marshall_value<R>(env, fn(java_env_t(env), java_unmarshall_value<T>(env, std::move(receiver)), java_unmarshall_value<A>(env, std::move(args))...));
+    }
   }
 };
 
