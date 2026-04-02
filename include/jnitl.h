@@ -992,6 +992,11 @@ struct java_type_info_t<bool> {
   marshall(JNIEnv *env, bool value) {
     return jboolean(value);
   }
+
+  static auto
+  unmarshall(JNIEnv *env, jboolean value) {
+    return bool(value);
+  }
 };
 
 template <>
@@ -1003,6 +1008,11 @@ struct java_type_info_t<unsigned char> {
   static auto
   marshall(JNIEnv *env, unsigned char value) {
     return jbyte(value);
+  }
+
+  static auto
+  unmarshall(JNIEnv *env, jbyte value) {
+    return (unsigned char) (value);
   }
 };
 
@@ -1016,6 +1026,11 @@ struct java_type_info_t<char> {
   marshall(JNIEnv *env, char value) {
     return jchar(value);
   }
+
+  static auto
+  unmarshall(JNIEnv *env, jchar value) {
+    return char(value);
+  }
 };
 
 template <>
@@ -1027,6 +1042,11 @@ struct java_type_info_t<short> {
   static auto
   marshall(JNIEnv *env, short value) {
     return jshort(value);
+  }
+
+  static auto
+  unmarshall(JNIEnv *env, jshort value) {
+    return short(value);
   }
 };
 
@@ -1040,6 +1060,11 @@ struct java_type_info_t<int> {
   marshall(JNIEnv *env, int value) {
     return jint(value);
   }
+
+  static auto
+  unmarshall(JNIEnv *env, jint value) {
+    return int(value);
+  }
 };
 
 template <>
@@ -1051,6 +1076,11 @@ struct java_type_info_t<long> {
   static auto
   marshall(JNIEnv *env, long value) {
     return jlong(value);
+  }
+
+  static auto
+  unmarshall(JNIEnv *env, jlong value) {
+    return long(value);
   }
 };
 
@@ -1064,6 +1094,11 @@ struct java_type_info_t<long long> {
   marshall(JNIEnv *env, long long value) {
     return jlong(value);
   }
+
+  static auto
+  unmarshall(JNIEnv *env, jlong value) {
+    return (long long) (value);
+  }
 };
 
 template <>
@@ -1075,6 +1110,11 @@ struct java_type_info_t<unsigned long> {
   static auto
   marshall(JNIEnv *env, unsigned long value) {
     return jlong(value);
+  }
+
+  static auto
+  unmarshall(JNIEnv *env, jlong value) {
+    return (unsigned long) (value);
   }
 };
 
@@ -1088,6 +1128,11 @@ struct java_type_info_t<unsigned long long> {
   marshall(JNIEnv *env, unsigned long long value) {
     return jlong(value);
   }
+
+  static auto
+  unmarshall(JNIEnv *env, jlong value) {
+    return (unsigned long long) (value);
+  }
 };
 
 template <>
@@ -1100,6 +1145,11 @@ struct java_type_info_t<float> {
   marshall(JNIEnv *env, float value) {
     return jfloat(value);
   }
+
+  static auto
+  unmarshall(JNIEnv *env, jfloat value) {
+    return float(value);
+  }
 };
 
 template <>
@@ -1111,6 +1161,11 @@ struct java_type_info_t<double> {
   static auto
   marshall(JNIEnv *env, double value) {
     return jdouble(value);
+  }
+
+  static auto
+  unmarshall(JNIEnv *env, jdouble value) {
+    return double(value);
   }
 };
 
