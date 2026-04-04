@@ -211,12 +211,6 @@ struct java_local_ref_t : T {
 
     return *this;
   }
-
-  jobject release() {
-    jobject h = this->handle_;
-    this->handle_ = nullptr;
-    return h;
-  }
 };
 
 template <typename T>
@@ -243,12 +237,6 @@ struct java_global_ref_t : T {
 
     return *this;
   }
-
-  jobject release() {
-    jobject h = this->handle_;
-    this->handle_ = nullptr;
-    return h;
-  }
 };
 
 template <typename T>
@@ -274,12 +262,6 @@ struct java_weak_global_ref_t : T {
     this->swap(that);
 
     return *this;
-  }
-
-  jobject release() {
-    jobject h = this->handle_;
-    this->handle_ = nullptr;
-    return h;
   }
 };
 
