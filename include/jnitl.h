@@ -281,7 +281,7 @@ struct java_string_t : java_object_t<"java/lang/String"> {
   java_string_t(const java_string_t &that) : java_object_t(that), utf8_(nullptr) {}
 
   ~java_string_t() {
-    if (utf8_) env_->ReleaseStringUTFChars(jstring(handle_), utf8_);
+    if (utf8_) env_->ReleaseStringUTFChars(reinterpret_cast<jstring>(handle_), utf8_);
   }
 
   java_string_t &
@@ -292,11 +292,11 @@ struct java_string_t : java_object_t<"java/lang/String"> {
   }
 
   operator jstring() const {
-    return jstring(handle_);
+    return reinterpret_cast<jstring>(handle_);
   }
 
   operator const char *() const {
-    if (utf8_ == nullptr) utf8_ = env_->GetStringUTFChars(jstring(handle_), nullptr);
+    if (utf8_ == nullptr) utf8_ = env_->GetStringUTFChars(reinterpret_cast<jstring>(handle_), nullptr);
 
     return utf8_;
   }
@@ -451,7 +451,7 @@ struct java_array_t<bool> : java_primitive_array_t<bool, jboolean> {
   }
 
   operator jbooleanArray() const {
-    return jbooleanArray(handle_);
+    return reinterpret_cast<jbooleanArray>(handle_);
   }
 
 protected:
@@ -502,7 +502,7 @@ struct java_array_t<unsigned char> : java_primitive_array_t<unsigned char, jbyte
   }
 
   operator jbyteArray() const {
-    return jbyteArray(handle_);
+    return reinterpret_cast<jbyteArray>(handle_);
   }
 
 protected:
@@ -553,7 +553,7 @@ struct java_array_t<char> : java_primitive_array_t<char, jchar> {
   }
 
   operator jcharArray() const {
-    return jcharArray(handle_);
+    return reinterpret_cast<jcharArray>(handle_);
   }
 
 protected:
@@ -604,7 +604,7 @@ struct java_array_t<short> : java_primitive_array_t<short, jshort> {
   }
 
   operator jshortArray() const {
-    return jshortArray(handle_);
+    return reinterpret_cast<jshortArray>(handle_);
   }
 
 protected:
@@ -655,7 +655,7 @@ struct java_array_t<int> : java_primitive_array_t<int, jint> {
   }
 
   operator jintArray() const {
-    return jintArray(handle_);
+    return reinterpret_cast<jintArray>(handle_);
   }
 
 protected:
@@ -706,7 +706,7 @@ struct java_array_t<long> : java_primitive_array_t<long, jlong> {
   }
 
   operator jlongArray() const {
-    return jlongArray(handle_);
+    return reinterpret_cast<jlongArray>(handle_);
   }
 
 protected:
@@ -757,7 +757,7 @@ struct java_array_t<float> : java_primitive_array_t<float, jfloat> {
   }
 
   operator jfloatArray() const {
-    return jfloatArray(handle_);
+    return reinterpret_cast<jfloatArray>(handle_);
   }
 
 protected:
@@ -808,7 +808,7 @@ struct java_array_t<double> : java_primitive_array_t<double, jdouble> {
   }
 
   operator jdoubleArray() const {
-    return jdoubleArray(handle_);
+    return reinterpret_cast<jdoubleArray>(handle_);
   }
 
 protected:
@@ -859,7 +859,7 @@ struct java_array_t : java_object_t<"java/lang/Object"> {
   }
 
   operator jobjectArray() const {
-    return jobjectArray(handle_);
+    return reinterpret_cast<jobjectArray>(handle_);
   }
 
   auto
@@ -903,7 +903,7 @@ struct java_byte_buffer_t : java_object_t<"java/nio/ByteBuffer"> {
   }
 
   operator jobjectArray() const {
-    return jobjectArray(handle_);
+    return reinterpret_cast<jobjectArray>(handle_);
   }
 
   uint8_t &
@@ -972,12 +972,12 @@ struct java_type_info_t<bool> {
 
   static auto
   marshall(JNIEnv *env, bool value) {
-    return jboolean(value);
+    return static_cast<jboolean>(value);
   }
 
   static auto
   unmarshall(JNIEnv *env, jboolean value) {
-    return bool(value);
+    return static_cast<bool>(value);
   }
 };
 
@@ -989,12 +989,12 @@ struct java_type_info_t<unsigned char> {
 
   static auto
   marshall(JNIEnv *env, unsigned char value) {
-    return jbyte(value);
+    return static_cast<jbyte>(value);
   }
 
   static auto
   unmarshall(JNIEnv *env, jbyte value) {
-    return (unsigned char) (value);
+    return static_cast<unsigned char>(value);
   }
 };
 
@@ -1006,12 +1006,12 @@ struct java_type_info_t<char> {
 
   static auto
   marshall(JNIEnv *env, char value) {
-    return jchar(value);
+    return static_cast<jchar>(value);
   }
 
   static auto
   unmarshall(JNIEnv *env, jchar value) {
-    return char(value);
+    return static_cast<char>(value);
   }
 };
 
@@ -1023,12 +1023,12 @@ struct java_type_info_t<short> {
 
   static auto
   marshall(JNIEnv *env, short value) {
-    return jshort(value);
+    return static_cast<jshort>(value);
   }
 
   static auto
   unmarshall(JNIEnv *env, jshort value) {
-    return short(value);
+    return static_cast<short>(value);
   }
 };
 
@@ -1040,12 +1040,12 @@ struct java_type_info_t<int> {
 
   static auto
   marshall(JNIEnv *env, int value) {
-    return jint(value);
+    return static_cast<jint>(value);
   }
 
   static auto
   unmarshall(JNIEnv *env, jint value) {
-    return int(value);
+    return static_cast<int>(value);
   }
 };
 
@@ -1057,12 +1057,12 @@ struct java_type_info_t<long> {
 
   static auto
   marshall(JNIEnv *env, long value) {
-    return jlong(value);
+    return static_cast<jlong>(value);
   }
 
   static auto
   unmarshall(JNIEnv *env, jlong value) {
-    return long(value);
+    return static_cast<long>(value);
   }
 };
 
@@ -1074,12 +1074,12 @@ struct java_type_info_t<long long> {
 
   static auto
   marshall(JNIEnv *env, long long value) {
-    return jlong(value);
+    return static_cast<jlong>(value);
   }
 
   static auto
   unmarshall(JNIEnv *env, jlong value) {
-    return (long long) (value);
+    return static_cast<long long>(value);
   }
 };
 
@@ -1091,12 +1091,12 @@ struct java_type_info_t<unsigned long> {
 
   static auto
   marshall(JNIEnv *env, unsigned long value) {
-    return jlong(value);
+    return static_cast<jlong>(value);
   }
 
   static auto
   unmarshall(JNIEnv *env, jlong value) {
-    return (unsigned long) (value);
+    return static_cast<unsigned long>(value);
   }
 };
 
@@ -1108,12 +1108,12 @@ struct java_type_info_t<unsigned long long> {
 
   static auto
   marshall(JNIEnv *env, unsigned long long value) {
-    return jlong(value);
+    return static_cast<jlong>(value);
   }
 
   static auto
   unmarshall(JNIEnv *env, jlong value) {
-    return (unsigned long long) (value);
+    return static_cast<unsigned long long>(value);
   }
 };
 
@@ -1125,12 +1125,12 @@ struct java_type_info_t<float> {
 
   static auto
   marshall(JNIEnv *env, float value) {
-    return jfloat(value);
+    return static_cast<jfloat>(value);
   }
 
   static auto
   unmarshall(JNIEnv *env, jfloat value) {
-    return float(value);
+    return static_cast<float>(value);
   }
 };
 
@@ -1142,12 +1142,12 @@ struct java_type_info_t<double> {
 
   static auto
   marshall(JNIEnv *env, double value) {
-    return jdouble(value);
+    return static_cast<jdouble>(value);
   }
 
   static auto
   unmarshall(JNIEnv *env, jdouble value) {
-    return double(value);
+    return static_cast<double>(value);
   }
 };
 
@@ -1251,11 +1251,11 @@ struct java_type_info_t<std::string> {
 
   static auto
   unmarshall(JNIEnv *env, const jobject &value) {
-    auto chars = env->GetStringUTFChars(jstring(value), nullptr);
+    auto chars = env->GetStringUTFChars(reinterpret_cast<jstring>(value), nullptr);
 
     std::string result(chars);
 
-    env->ReleaseStringUTFChars(jstring(value), chars);
+    env->ReleaseStringUTFChars(reinterpret_cast<jstring>(value), chars);
 
     return result;
   }
