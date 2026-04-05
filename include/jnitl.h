@@ -1455,6 +1455,23 @@ private:
 template <auto fn>
 struct java_callback_t;
 
+template <typename T, typename... A, void fn(java_env_t, T, A...)>
+struct java_callback_t<fn> {
+  static constexpr java_string_literal_t signature = "(" + (java_type_info_t<A>::signature + ...) + ")V";
+
+  static constexpr auto
+  create() {
+    return +[](JNIEnv *env, typename java_type_info_t<T>::type receiver, typename java_type_info_t<A>::type... args) -> void {
+      return apply(env, receiver, std::move(args)...);
+    };
+  }
+
+  static constexpr auto
+  apply(JNIEnv *env, typename java_type_info_t<T>::type receiver, typename java_type_info_t<A>::type... args) {
+    fn(java_env_t(env), java_unmarshall_value<T>(env, std::move(receiver)), java_unmarshall_value<A>(env, std::move(args))...);
+  }
+};
+
 template <typename T, typename R, typename... A, R fn(java_env_t, T, A...)>
 struct java_callback_t<fn> {
   static constexpr java_string_literal_t signature = "(" + (java_type_info_t<A>::signature + ...) + ")" + java_type_info_t<R>::signature;
@@ -1468,11 +1485,7 @@ struct java_callback_t<fn> {
 
   static constexpr auto
   apply(JNIEnv *env, typename java_type_info_t<T>::type receiver, typename java_type_info_t<A>::type... args) {
-    if constexpr (std::is_void_v<R>) {
-      fn(java_env_t(env), java_unmarshall_value<T>(env, std::move(receiver)), java_unmarshall_value<A>(env, std::move(args))...);
-    } else {
-      return java_marshall_value<R>(env, fn(java_env_t(env), java_unmarshall_value<T>(env, std::move(receiver)), java_unmarshall_value<A>(env, std::move(args))...));
-    }
+    return java_marshall_value<R>(env, fn(java_env_t(env), java_unmarshall_value<T>(env, std::move(receiver)), java_unmarshall_value<A>(env, std::move(args))...));
   }
 };
 
