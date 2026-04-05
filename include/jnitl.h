@@ -196,7 +196,7 @@ struct java_local_ref_t : T {
   java_local_ref_t(const T &object) : java_local_ref_t(object.env_, object.handle_) {}
 
   java_local_ref_t(java_local_ref_t &&that) {
-    swap(that);
+    this->swap(that);
   }
 
   java_local_ref_t(const java_local_ref_t &that) : java_local_ref_t(that.env_, that.handle_) {}
@@ -222,7 +222,7 @@ struct java_global_ref_t : T {
   java_global_ref_t(const T &object) : java_global_ref_t(object.env_, object.handle_) {}
 
   java_global_ref_t(java_global_ref_t &&that) {
-    swap(that);
+    this->swap(that);
   }
 
   java_global_ref_t(const java_global_ref_t &that) : java_global_ref_t(that.env_, that.handle_) {}
@@ -248,7 +248,7 @@ struct java_weak_global_ref_t : T {
   java_weak_global_ref_t(const T &object) : java_weak_global_ref_t(object.env_, object.handle_) {}
 
   java_weak_global_ref_t(java_weak_global_ref_t &&that) {
-    swap(that);
+    this->swap(that);
   }
 
   java_weak_global_ref_t(const java_weak_global_ref_t &that) : java_weak_global_ref_t(that.env_, that.handle_) {}
@@ -974,6 +974,11 @@ struct java_type_info_t<bool> {
   marshall(JNIEnv *env, bool value) {
     return jboolean(value);
   }
+
+  static auto
+  unmarshall(JNIEnv *env, jboolean value) {
+    return bool(value);
+  }
 };
 
 template <>
@@ -985,6 +990,11 @@ struct java_type_info_t<unsigned char> {
   static auto
   marshall(JNIEnv *env, unsigned char value) {
     return jbyte(value);
+  }
+
+  static auto
+  unmarshall(JNIEnv *env, jbyte value) {
+    return (unsigned char) (value);
   }
 };
 
@@ -998,6 +1008,11 @@ struct java_type_info_t<char> {
   marshall(JNIEnv *env, char value) {
     return jchar(value);
   }
+
+  static auto
+  unmarshall(JNIEnv *env, jchar value) {
+    return char(value);
+  }
 };
 
 template <>
@@ -1009,6 +1024,11 @@ struct java_type_info_t<short> {
   static auto
   marshall(JNIEnv *env, short value) {
     return jshort(value);
+  }
+
+  static auto
+  unmarshall(JNIEnv *env, jshort value) {
+    return short(value);
   }
 };
 
@@ -1022,6 +1042,11 @@ struct java_type_info_t<int> {
   marshall(JNIEnv *env, int value) {
     return jint(value);
   }
+
+  static auto
+  unmarshall(JNIEnv *env, jint value) {
+    return int(value);
+  }
 };
 
 template <>
@@ -1033,6 +1058,11 @@ struct java_type_info_t<long> {
   static auto
   marshall(JNIEnv *env, long value) {
     return jlong(value);
+  }
+
+  static auto
+  unmarshall(JNIEnv *env, jlong value) {
+    return long(value);
   }
 };
 
@@ -1046,6 +1076,11 @@ struct java_type_info_t<long long> {
   marshall(JNIEnv *env, long long value) {
     return jlong(value);
   }
+
+  static auto
+  unmarshall(JNIEnv *env, jlong value) {
+    return (long long) (value);
+  }
 };
 
 template <>
@@ -1057,6 +1092,11 @@ struct java_type_info_t<unsigned long> {
   static auto
   marshall(JNIEnv *env, unsigned long value) {
     return jlong(value);
+  }
+
+  static auto
+  unmarshall(JNIEnv *env, jlong value) {
+    return (unsigned long) (value);
   }
 };
 
@@ -1070,6 +1110,11 @@ struct java_type_info_t<unsigned long long> {
   marshall(JNIEnv *env, unsigned long long value) {
     return jlong(value);
   }
+
+  static auto
+  unmarshall(JNIEnv *env, jlong value) {
+    return (unsigned long long) (value);
+  }
 };
 
 template <>
@@ -1082,6 +1127,11 @@ struct java_type_info_t<float> {
   marshall(JNIEnv *env, float value) {
     return jfloat(value);
   }
+
+  static auto
+  unmarshall(JNIEnv *env, jfloat value) {
+    return float(value);
+  }
 };
 
 template <>
@@ -1093,6 +1143,11 @@ struct java_type_info_t<double> {
   static auto
   marshall(JNIEnv *env, double value) {
     return jdouble(value);
+  }
+
+  static auto
+  unmarshall(JNIEnv *env, jdouble value) {
+    return double(value);
   }
 };
 
@@ -1152,7 +1207,7 @@ struct java_type_info_t<java_array_t<T>> {
   }
 
   static auto
-  unmarshall(JNIEnv *env, const jobjectArray &value) {
+  unmarshall(JNIEnv *env, jobject value) {
     return java_array_t<T>(env, value);
   }
 };
@@ -1399,6 +1454,23 @@ private:
 
 template <auto fn>
 struct java_callback_t;
+
+template <typename T, typename... A, void fn(java_env_t, T, A...)>
+struct java_callback_t<fn> {
+  static constexpr java_string_literal_t signature = "(" + (java_type_info_t<A>::signature + ...) + ")V";
+
+  static constexpr auto
+  create() {
+    return +[](JNIEnv *env, typename java_type_info_t<T>::type receiver, typename java_type_info_t<A>::type... args) -> void {
+      return apply(env, receiver, std::move(args)...);
+    };
+  }
+
+  static constexpr auto
+  apply(JNIEnv *env, typename java_type_info_t<T>::type receiver, typename java_type_info_t<A>::type... args) {
+    fn(java_env_t(env), java_unmarshall_value<T>(env, std::move(receiver)), java_unmarshall_value<A>(env, std::move(args))...);
+  }
+};
 
 template <typename T, typename R, typename... A, R fn(java_env_t, T, A...)>
 struct java_callback_t<fn> {
