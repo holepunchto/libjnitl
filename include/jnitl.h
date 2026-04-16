@@ -387,12 +387,12 @@ struct java_primitive_array_t : java_object_t<"java/lang/Object"> {
 
   void
   copy_to(std::span<T> dest, size_t start = 0) const {
-    get_region(start, dest.size(), dest.data());
+    get_region(start, dest.size(), reinterpret_cast<U *>(dest.data()));
   }
 
   void
   copy_from(std::span<const T> src, size_t start = 0) {
-    set_region(start, src.size(), src.data());
+    set_region(start, src.size(), reinterpret_cast<const U *>(src.data()));
   }
 
   auto
