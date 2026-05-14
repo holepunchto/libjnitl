@@ -5,6 +5,7 @@ endif()
 list(APPEND tests
   basic
   class-loader
+  global-ref
   native-method
 )
 

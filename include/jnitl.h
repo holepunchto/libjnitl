@@ -215,28 +215,45 @@ struct java_local_ref_t : T {
 
 template <typename T>
 struct java_global_ref_t : T {
-  java_global_ref_t() : T() {}
+  java_global_ref_t() : T(), vm_(nullptr) {}
 
-  java_global_ref_t(JNIEnv *env, jobject handle) : T(env, env->NewGlobalRef(handle)) {}
+  java_global_ref_t(JNIEnv *env, jobject handle) : T(env, env->NewGlobalRef(handle)), vm_(nullptr) {
+    env->GetJavaVM(&vm_);
+  }
 
   java_global_ref_t(const T &object) : java_global_ref_t(object.env_, object.handle_) {}
 
-  java_global_ref_t(java_global_ref_t &&that) {
-    this->swap(that);
+  java_global_ref_t(java_global_ref_t &&that) : java_global_ref_t() {
+    swap(that);
   }
 
   java_global_ref_t(const java_global_ref_t &that) : java_global_ref_t(that.env_, that.handle_) {}
 
   ~java_global_ref_t() {
-    if (this->handle_) this->env_->DeleteGlobalRef(this->handle_);
+    if (this->handle_ == nullptr || vm_ == nullptr) return;
+
+    JNIEnv *env;
+    if (vm_->GetEnv(reinterpret_cast<void **>(&env), JNI_VERSION_1_6) == JNI_OK) {
+      env->DeleteGlobalRef(this->handle_);
+    }
   }
 
   java_global_ref_t &
   operator=(java_global_ref_t that) {
-    this->swap(that);
+    swap(that);
 
     return *this;
   }
+
+  void
+  swap(java_global_ref_t &that) {
+    T::swap(that);
+
+    std::swap(vm_, that.vm_);
+  }
+
+private:
+  JavaVM *vm_;
 };
 
 template <typename T>
