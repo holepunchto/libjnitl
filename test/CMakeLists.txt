@@ -6,6 +6,7 @@ list(APPEND tests
   basic
   class-loader
   native-method
+  null-string
 )
 
 foreach(test IN LISTS tests)
