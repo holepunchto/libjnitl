@@ -8,6 +8,16 @@ list(APPEND tests
   native-method
 )
 
+# Windows links against 'jvm.lib' but loads 'jvm.dll', which sits in a JDK
+# subdirectory that is not searched by default.
+if(WIN32)
+  cmake_path(GET JAVA_JVM_LIBRARY PARENT_PATH java_library_directory)
+  cmake_path(GET java_library_directory PARENT_PATH java_home)
+  cmake_path(NATIVE_PATH java_home java_runtime_directory)
+
+  set(java_runtime_directory "${java_runtime_directory}\\bin\\server")
+endif()
+
 foreach(test IN LISTS tests)
   add_executable(${test} ${test}.cc)
 
@@ -38,5 +48,13 @@ foreach(test IN LISTS tests)
     PROPERTIES
     TIMEOUT 30
   )
+
+  if(WIN32)
+    set_tests_properties(
+      ${test}
+      PROPERTIES
+      ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:${java_runtime_directory}"
+    )
+  endif()
 endforeach()
 
