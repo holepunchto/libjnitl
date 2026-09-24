@@ -9,13 +9,23 @@ list(APPEND tests
 )
 
 # Windows links against 'jvm.lib' but loads 'jvm.dll', which sits in a JDK
-# subdirectory that is not searched by default.
+# subdirectory that is not searched by default. JDK 8 keeps it under 'jre'.
 if(WIN32)
   cmake_path(GET JAVA_JVM_LIBRARY PARENT_PATH java_library_directory)
   cmake_path(GET java_library_directory PARENT_PATH java_home)
-  cmake_path(NATIVE_PATH java_home java_runtime_directory)
 
-  set(java_runtime_directory "${java_runtime_directory}\\bin\\server")
+  find_file(
+    java_runtime jvm.dll
+    PATHS "${java_home}/bin/server" "${java_home}/jre/bin/server"
+    NO_DEFAULT_PATH
+  )
+
+  if(NOT java_runtime)
+    message(FATAL_ERROR "Could not find 'jvm.dll' in '${java_home}'")
+  endif()
+
+  cmake_path(GET java_runtime PARENT_PATH java_runtime_directory)
+  cmake_path(NATIVE_PATH java_runtime_directory java_runtime_directory)
 endif()
 
 foreach(test IN LISTS tests)
