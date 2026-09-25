@@ -36,7 +36,7 @@ target_link_libraries(
     JNI::JNI
 )
 
-if(ANDROID)
+if(ANDROID AND TARGET JNI::NativeHelper)
   target_link_libraries(
     jnitl
     INTERFACE
