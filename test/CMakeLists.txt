@@ -8,8 +8,8 @@ list(APPEND tests
   native-method
 )
 
-# Windows links against 'jvm.lib' but loads 'jvm.dll', which sits in a JDK
-# subdirectory that is not searched by default. JDK 8 keeps it under 'jre'.
+# Windows links against jvm.dll, which sits in a JDK subdirectory that is not
+# searched by default.
 if(WIN32)
   cmake_path(GET JAVA_JVM_LIBRARY PARENT_PATH java_library_directory)
   cmake_path(GET java_library_directory PARENT_PATH java_home)
