@@ -5,6 +5,7 @@
 #include <span>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 #include <jni.h>
@@ -1192,7 +1193,7 @@ struct java_type_info_t<R(void)> {
 
 template <typename R, typename... A>
 struct java_type_info_t<R(A...)> {
-  static constexpr java_string_literal_t signature = "(" + (java_type_info_t<A>::signature + ...) + ")" + java_type_info_t<R>::signature;
+  static constexpr java_string_literal_t signature = "(" + (java_string_literal_t("") + ... + java_type_info_t<A>::signature) + ")" + java_type_info_t<R>::signature;
 };
 
 template <typename T>
@@ -1272,7 +1273,23 @@ java_marshall_value(JNIEnv *env, T value) {
 template <typename T>
 static jvalue
 java_marshall_argument_value(JNIEnv *env, T value) {
-  return jvalue{.l = reinterpret_cast<jobject>(java_marshall_value(env, value))};
+  auto marshalled = java_marshall_value(env, value);
+
+  using type = decltype(marshalled);
+
+  jvalue result{};
+
+  if constexpr (std::is_same_v<type, jboolean>) result.z = marshalled;
+  else if constexpr (std::is_same_v<type, jbyte>) result.b = marshalled;
+  else if constexpr (std::is_same_v<type, jchar>) result.c = marshalled;
+  else if constexpr (std::is_same_v<type, jshort>) result.s = marshalled;
+  else if constexpr (std::is_same_v<type, jint>) result.i = marshalled;
+  else if constexpr (std::is_same_v<type, jlong>) result.j = marshalled;
+  else if constexpr (std::is_same_v<type, jfloat>) result.f = marshalled;
+  else if constexpr (std::is_same_v<type, jdouble>) result.d = marshalled;
+  else result.l = reinterpret_cast<jobject>(marshalled);
+
+  return result;
 }
 
 template <typename T>
@@ -1459,7 +1476,7 @@ struct java_callback_t;
 
 template <typename T, typename... A, void fn(java_env_t, T, A...)>
 struct java_callback_t<fn> {
-  static constexpr java_string_literal_t signature = "(" + (java_type_info_t<A>::signature + ...) + ")V";
+  static constexpr java_string_literal_t signature = "(" + (java_string_literal_t("") + ... + java_type_info_t<A>::signature) + ")V";
 
   static constexpr auto
   create() {
@@ -1476,7 +1493,7 @@ struct java_callback_t<fn> {
 
 template <typename T, typename R, typename... A, R fn(java_env_t, T, A...)>
 struct java_callback_t<fn> {
-  static constexpr java_string_literal_t signature = "(" + (java_type_info_t<A>::signature + ...) + ")" + java_type_info_t<R>::signature;
+  static constexpr java_string_literal_t signature = "(" + (java_string_literal_t("") + ... + java_type_info_t<A>::signature) + ")" + java_type_info_t<R>::signature;
 
   static constexpr auto
   create() {
