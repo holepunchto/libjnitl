@@ -5,9 +5,15 @@ endif()
 list(APPEND tests
   basic
   class-loader
+  exception
   native-method
+  native-method-exception
   null-string
 )
+
+add_jar(thrower SOURCES Thrower.java)
+
+get_target_property(thrower_jar thrower JAR_FILE)
 
 # Windows links against jvm.dll, which sits in a JDK subdirectory that is not
 # searched by default.
@@ -69,3 +75,10 @@ foreach(test IN LISTS tests)
   endif()
 endforeach()
 
+add_dependencies(native-method-exception thrower)
+
+set_tests_properties(
+  native-method-exception
+  PROPERTIES
+  ENVIRONMENT "TEST_CLASS_PATH=${thrower_jar}"
+)

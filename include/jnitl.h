@@ -322,6 +322,95 @@ private:
   mutable const char *utf8_;
 };
 
+using java_throwable_t = java_object_t<"java/lang/Throwable">;
+
+static inline std::string
+java_describe_throwable(JNIEnv *env, jthrowable error) {
+  auto clazz = env->GetObjectClass(error);
+
+  auto id = env->GetMethodID(clazz, "toString", "()Ljava/lang/String;");
+
+  env->DeleteLocalRef(clazz);
+
+  if (id == nullptr) {
+    env->ExceptionClear();
+
+    return "Unknown Java exception";
+  }
+
+  auto handle = env->CallObjectMethod(error, id);
+
+  if (handle == nullptr) {
+    env->ExceptionClear();
+
+    return "Unknown Java exception";
+  }
+
+  auto description = static_cast<std::string>(java_string_t(env, handle));
+
+  env->DeleteLocalRef(handle);
+
+  return description;
+}
+
+struct java_exception_t : std::exception {
+  java_exception_t(JNIEnv *env, jthrowable error)
+      : error_(env, error),
+        description_(java_describe_throwable(env, error)) {}
+
+  operator jthrowable() const {
+    return reinterpret_cast<jthrowable>(static_cast<jobject>(error_));
+  }
+
+  const char *
+  what() const noexcept override {
+    return description_.c_str();
+  }
+
+private:
+  java_global_ref_t<java_throwable_t> error_;
+  std::string description_;
+};
+
+static inline void
+java_check_exception(JNIEnv *env) {
+  if (env->ExceptionCheck() == JNI_FALSE) return;
+
+  auto error = env->ExceptionOccurred();
+
+  env->ExceptionClear();
+
+  auto exception = java_exception_t(env, error);
+
+  env->DeleteLocalRef(error);
+
+  throw exception;
+}
+
+static inline void
+java_throw_runtime_exception(JNIEnv *env, const char *message) {
+  auto clazz = env->FindClass("java/lang/RuntimeException");
+
+  if (clazz == nullptr) return;
+
+  env->ThrowNew(clazz, message);
+
+  env->DeleteLocalRef(clazz);
+}
+
+static inline void
+java_throw_exception(JNIEnv *env) {
+  try {
+    throw;
+  } catch (const java_exception_t &error) {
+    env->Throw(error);
+  } catch (const std::exception &error) {
+    java_throw_runtime_exception(env, error.what());
+  } catch (...) {
+    java_throw_runtime_exception(env, "Unknown native exception");
+  }
+}
+
 template <typename T, typename U>
 struct java_primitive_array_t : java_object_t<"java/lang/Object"> {
   static constexpr size_t npos = -1;
@@ -1485,9 +1574,13 @@ struct java_callback_t<fn> {
     };
   }
 
-  static constexpr auto
+  static void
   apply(JNIEnv *env, typename java_type_info_t<T>::type receiver, typename java_type_info_t<A>::type... args) {
-    fn(java_env_t(env), java_unmarshall_value<T>(env, std::move(receiver)), java_unmarshall_value<A>(env, std::move(args))...);
+    try {
+      fn(java_env_t(env), java_unmarshall_value<T>(env, std::move(receiver)), java_unmarshall_value<A>(env, std::move(args))...);
+    } catch (...) {
+      java_throw_exception(env);
+    }
   }
 };
 
@@ -1502,9 +1595,15 @@ struct java_callback_t<fn> {
     };
   }
 
-  static constexpr auto
-  apply(JNIEnv *env, typename java_type_info_t<T>::type receiver, typename java_type_info_t<A>::type... args) {
-    return java_marshall_value<R>(env, fn(java_env_t(env), java_unmarshall_value<T>(env, std::move(receiver)), java_unmarshall_value<A>(env, std::move(args))...));
+  static auto
+  apply(JNIEnv *env, typename java_type_info_t<T>::type receiver, typename java_type_info_t<A>::type... args) -> typename java_type_info_t<R>::type {
+    try {
+      return java_marshall_value<R>(env, fn(java_env_t(env), java_unmarshall_value<T>(env, std::move(receiver)), java_unmarshall_value<A>(env, std::move(args))...));
+    } catch (...) {
+      java_throw_exception(env);
+
+      return {};
+    }
   }
 };
 
@@ -1800,6 +1899,8 @@ struct java_method_invoker_t<void(A...)> {
     };
 
     env->CallVoidMethodA(receiver, method, argv);
+
+    java_check_exception(env);
   }
 
   static void
@@ -1809,6 +1910,8 @@ struct java_method_invoker_t<void(A...)> {
     };
 
     env->CallStaticVoidMethodA(receiver, method, argv);
+
+    java_check_exception(env);
   }
 };
 
@@ -1820,7 +1923,11 @@ struct java_method_invoker_t<bool(A...)> {
       java_marshall_argument_value(env, std::move(args))...
     };
 
-    return env->CallBooleanMethodA(receiver, method, argv);
+    auto result = env->CallBooleanMethodA(receiver, method, argv);
+
+    java_check_exception(env);
+
+    return result;
   }
 
   static bool
@@ -1829,7 +1936,11 @@ struct java_method_invoker_t<bool(A...)> {
       java_marshall_argument_value(env, std::move(args))...
     };
 
-    return env->CallStaticBooleanMethodA(receiver, method, argv);
+    auto result = env->CallStaticBooleanMethodA(receiver, method, argv);
+
+    java_check_exception(env);
+
+    return result;
   }
 };
 
@@ -1841,7 +1952,11 @@ struct java_method_invoker_t<unsigned char(A...)> {
       java_marshall_argument_value(env, std::move(args))...
     };
 
-    return env->CallByteMethodA(receiver, method, argv);
+    auto result = env->CallByteMethodA(receiver, method, argv);
+
+    java_check_exception(env);
+
+    return result;
   }
 
   static unsigned char
@@ -1850,7 +1965,11 @@ struct java_method_invoker_t<unsigned char(A...)> {
       java_marshall_argument_value(env, std::move(args))...
     };
 
-    return env->CallStaticByteMethodA(receiver, method, argv);
+    auto result = env->CallStaticByteMethodA(receiver, method, argv);
+
+    java_check_exception(env);
+
+    return result;
   }
 };
 
@@ -1862,7 +1981,11 @@ struct java_method_invoker_t<char(A...)> {
       java_marshall_argument_value(env, std::move(args))...
     };
 
-    return env->CallCharMethodA(receiver, method, argv);
+    auto result = env->CallCharMethodA(receiver, method, argv);
+
+    java_check_exception(env);
+
+    return result;
   }
 
   static char
@@ -1871,7 +1994,11 @@ struct java_method_invoker_t<char(A...)> {
       java_marshall_argument_value(env, std::move(args))...
     };
 
-    return env->CallStaticCharMethodA(receiver, method, argv);
+    auto result = env->CallStaticCharMethodA(receiver, method, argv);
+
+    java_check_exception(env);
+
+    return result;
   }
 };
 
@@ -1883,7 +2010,11 @@ struct java_method_invoker_t<short(A...)> {
       java_marshall_argument_value(env, std::move(args))...
     };
 
-    return env->CallShortMethodA(receiver, method, argv);
+    auto result = env->CallShortMethodA(receiver, method, argv);
+
+    java_check_exception(env);
+
+    return result;
   }
 
   static char
@@ -1892,7 +2023,11 @@ struct java_method_invoker_t<short(A...)> {
       java_marshall_argument_value(env, std::move(args))...
     };
 
-    return env->CallStaticShortMethodA(receiver, method, argv);
+    auto result = env->CallStaticShortMethodA(receiver, method, argv);
+
+    java_check_exception(env);
+
+    return result;
   }
 };
 
@@ -1904,7 +2039,11 @@ struct java_method_invoker_t<int(A...)> {
       java_marshall_argument_value(env, std::move(args))...
     };
 
-    return env->CallIntMethodA(receiver, method, argv);
+    auto result = env->CallIntMethodA(receiver, method, argv);
+
+    java_check_exception(env);
+
+    return result;
   }
 
   static int
@@ -1913,7 +2052,11 @@ struct java_method_invoker_t<int(A...)> {
       java_marshall_argument_value(env, std::move(args))...
     };
 
-    return env->CallStaticIntMethodA(receiver, method, argv);
+    auto result = env->CallStaticIntMethodA(receiver, method, argv);
+
+    java_check_exception(env);
+
+    return result;
   }
 };
 
@@ -1925,7 +2068,11 @@ struct java_method_invoker_t<long(A...)> {
       java_marshall_argument_value(env, std::move(args))...
     };
 
-    return env->CallLongMethodA(receiver, method, argv);
+    auto result = env->CallLongMethodA(receiver, method, argv);
+
+    java_check_exception(env);
+
+    return result;
   }
 
   static long
@@ -1934,7 +2081,11 @@ struct java_method_invoker_t<long(A...)> {
       java_marshall_argument_value(env, std::move(args))...
     };
 
-    return env->CallStaticLongMethodA(receiver, method, argv);
+    auto result = env->CallStaticLongMethodA(receiver, method, argv);
+
+    java_check_exception(env);
+
+    return result;
   }
 };
 
@@ -1946,7 +2097,11 @@ struct java_method_invoker_t<float(A...)> {
       java_marshall_argument_value(env, std::move(args))...
     };
 
-    return env->CallFloatMethodA(receiver, method, argv);
+    auto result = env->CallFloatMethodA(receiver, method, argv);
+
+    java_check_exception(env);
+
+    return result;
   }
 
   static float
@@ -1955,7 +2110,11 @@ struct java_method_invoker_t<float(A...)> {
       java_marshall_argument_value(env, std::move(args))...
     };
 
-    return env->CallStaticFloatMethodA(receiver, method, argv);
+    auto result = env->CallStaticFloatMethodA(receiver, method, argv);
+
+    java_check_exception(env);
+
+    return result;
   }
 };
 
@@ -1967,7 +2126,11 @@ struct java_method_invoker_t<double(A...)> {
       java_marshall_argument_value(env, std::move(args))...
     };
 
-    return env->CallDoubleMethodA(receiver, method, argv);
+    auto result = env->CallDoubleMethodA(receiver, method, argv);
+
+    java_check_exception(env);
+
+    return result;
   }
 
   static double
@@ -1976,7 +2139,11 @@ struct java_method_invoker_t<double(A...)> {
       java_marshall_argument_value(env, std::move(args))...
     };
 
-    return env->CallStaticDoubleMethodA(receiver, method, argv);
+    auto result = env->CallStaticDoubleMethodA(receiver, method, argv);
+
+    java_check_exception(env);
+
+    return result;
   }
 };
 
@@ -1988,7 +2155,11 @@ struct java_method_invoker_t<R(A...)> {
       java_marshall_argument_value(env, std::move(args))...
     };
 
-    return java_unmarshall_value<R>(env, env->CallObjectMethodA(receiver, method, argv));
+    auto result = env->CallObjectMethodA(receiver, method, argv);
+
+    java_check_exception(env);
+
+    return java_unmarshall_value<R>(env, result);
   }
 
   static R
@@ -1997,7 +2168,11 @@ struct java_method_invoker_t<R(A...)> {
       java_marshall_argument_value(env, std::move(args))...
     };
 
-    return java_unmarshall_value<R>(env, env->CallStaticObjectMethodA(receiver, method, argv));
+    auto result = env->CallStaticObjectMethodA(receiver, method, argv);
+
+    java_check_exception(env);
+
+    return java_unmarshall_value<R>(env, result);
   }
 };
 
@@ -2161,7 +2336,7 @@ struct java_class_t : java_object_t<"java/lang/Class"> {
   }
 
   operator jclass() const {
-    return handle_;
+    return reinterpret_cast<jclass>(handle_);
   }
 
   template <typename... A>
@@ -2172,7 +2347,11 @@ struct java_class_t : java_object_t<"java/lang/Class"> {
       java_marshall_argument_value(env_, std::move(args))...
     };
 
-    return T(env_, env_->NewObjectA(jclass(handle_), init, argv));
+    auto result = env_->NewObjectA(jclass(handle_), init, argv);
+
+    java_check_exception(env_);
+
+    return T(env_, result);
   }
 
   template <typename U>
