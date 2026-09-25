@@ -1251,6 +1251,8 @@ struct java_type_info_t<std::string> {
 
   static auto
   unmarshall(JNIEnv *env, const jobject &value) {
+    if (value == nullptr) throw std::invalid_argument("Could not unmarshall null as a string");
+
     auto chars = env->GetStringUTFChars(reinterpret_cast<jstring>(value), nullptr);
 
     std::string result(chars);
