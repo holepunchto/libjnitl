@@ -356,6 +356,19 @@ struct java_exception_t : std::runtime_error {
     return reinterpret_cast<jthrowable>(error_.get());
   }
 
+  template <typename T = java_throwable_t>
+  java_local_ref_t<T>
+  get(JNIEnv *env) const {
+    return java_local_ref_t<T>(env, error_.get());
+  }
+
+  template <java_class_name_t N>
+  bool
+  is_instance_of(JNIEnv *env) const;
+
+  std::optional<std::string>
+  message(JNIEnv *env) const;
+
 private:
   std::shared_ptr<std::remove_pointer_t<jobject>> error_;
 };
@@ -462,6 +475,39 @@ struct java_string_t : java_object_t<"java/lang/String"> {
 private:
   mutable const char *utf8_;
 };
+
+template <java_class_name_t N>
+inline bool
+java_exception_t::is_instance_of(JNIEnv *env) const {
+  auto clazz = java_check_exception(env, env->FindClass(N));
+
+  auto result = env->IsInstanceOf(error_.get(), clazz);
+
+  env->DeleteLocalRef(clazz);
+
+  return result;
+}
+
+inline std::optional<std::string>
+java_exception_t::message(JNIEnv *env) const {
+  auto clazz = env->GetObjectClass(error_.get());
+
+  auto id = env->GetMethodID(clazz, "getMessage", "()Ljava/lang/String;");
+
+  env->DeleteLocalRef(clazz);
+
+  java_check_exception(env);
+
+  auto handle = java_check_exception(env, env->CallObjectMethod(error_.get(), id));
+
+  if (handle == nullptr) return std::nullopt;
+
+  std::string message = java_string_t(env, handle);
+
+  env->DeleteLocalRef(handle);
+
+  return message;
+}
 
 template <typename T, typename U>
 struct java_primitive_array_t : java_object_t<"java/lang/Object"> {
@@ -1627,7 +1673,7 @@ struct java_callback_t<fn> {
 
   static constexpr auto
   create() {
-    return +[](JNIEnv *env, typename java_type_info_t<T>::type receiver, typename java_type_info_t<A>::type... args) -> void {
+    return +[](JNIEnv *env, typename java_type_info_t<T>::type receiver, typename java_type_info_t<A>::type... args) noexcept -> void {
       return apply(env, receiver, std::move(args)...);
     };
   }
@@ -1648,7 +1694,7 @@ struct java_callback_t<fn> {
 
   static constexpr auto
   create() {
-    return +[](JNIEnv *env, typename java_type_info_t<T>::type receiver, typename java_type_info_t<A>::type... args) -> typename java_type_info_t<R>::type {
+    return +[](JNIEnv *env, typename java_type_info_t<T>::type receiver, typename java_type_info_t<A>::type... args) noexcept -> typename java_type_info_t<R>::type {
       return apply(env, receiver, std::move(args)...);
     };
   }

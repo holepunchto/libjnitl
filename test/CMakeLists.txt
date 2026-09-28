@@ -6,11 +6,13 @@ list(APPEND tests
   basic
   class-loader
   exception
+  exception-inspect
   exception-lookup
   exception-thread
   native-method
   native-method-exception
   native-method-lookup-exception
+  native-method-round-trip
   null-string
 )
 
