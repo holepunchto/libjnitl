@@ -1,7 +1,10 @@
 #pragma once
 
+#include <algorithm>
 #include <array>
+#include <exception>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <span>
 #include <stdexcept>
@@ -373,6 +376,56 @@ private:
   std::shared_ptr<std::remove_pointer_t<jobject>> error_;
 };
 
+struct java_native_exception_t {
+  jweak error;
+  std::exception_ptr exception;
+};
+
+inline std::mutex java_native_exceptions_mutex;
+
+inline std::vector<java_native_exception_t> java_native_exceptions;
+
+static inline void
+java_prune_native_exceptions(JNIEnv *env) {
+  std::erase_if(java_native_exceptions, [env](const java_native_exception_t &entry) {
+    if (env->IsSameObject(entry.error, nullptr) == JNI_FALSE) return false;
+
+    env->DeleteWeakGlobalRef(entry.error);
+
+    return true;
+  });
+}
+
+static inline void
+java_register_native_exception(JNIEnv *env, jthrowable error, std::exception_ptr exception) {
+  std::lock_guard lock(java_native_exceptions_mutex);
+
+  java_prune_native_exceptions(env);
+
+  java_native_exceptions.push_back({env->NewWeakGlobalRef(error), std::move(exception)});
+}
+
+static inline std::exception_ptr
+java_take_native_exception(JNIEnv *env, jthrowable error) {
+  std::lock_guard lock(java_native_exceptions_mutex);
+
+  java_prune_native_exceptions(env);
+
+  auto entry = std::find_if(java_native_exceptions.begin(), java_native_exceptions.end(), [env, error](const java_native_exception_t &entry) {
+    return env->IsSameObject(entry.error, error);
+  });
+
+  if (entry == java_native_exceptions.end()) return nullptr;
+
+  auto exception = std::move(entry->exception);
+
+  env->DeleteWeakGlobalRef(entry->error);
+
+  java_native_exceptions.erase(entry);
+
+  return exception;
+}
+
 static inline void
 java_check_exception(JNIEnv *env) {
   if (env->ExceptionCheck() == JNI_FALSE) return;
@@ -380,6 +433,14 @@ java_check_exception(JNIEnv *env) {
   auto error = env->ExceptionOccurred();
 
   env->ExceptionClear();
+
+  auto native_exception = java_take_native_exception(env, error);
+
+  if (native_exception) {
+    env->DeleteLocalRef(error);
+
+    std::rethrow_exception(native_exception);
+  }
 
   auto exception = java_exception_t(env, error);
 
@@ -397,26 +458,46 @@ java_check_exception(JNIEnv *env, T result) {
 }
 
 static inline void
-java_throw_runtime_exception(JNIEnv *env, const char *message) {
-  auto clazz = env->FindClass("java/lang/RuntimeException");
+java_throw_native_exception(JNIEnv *env, const char *class_name, const char *message, std::exception_ptr exception) {
+  auto clazz = env->FindClass(class_name);
 
   if (clazz == nullptr) return;
 
-  env->ThrowNew(clazz, message);
+  auto err = env->ThrowNew(clazz, message);
 
   env->DeleteLocalRef(clazz);
+
+  if (err != JNI_OK) return;
+
+  auto error = env->ExceptionOccurred();
+
+  env->ExceptionClear();
+
+  java_register_native_exception(env, error, std::move(exception));
+
+  env->Throw(error);
+
+  env->DeleteLocalRef(error);
 }
 
 static inline void
 java_throw_exception(JNIEnv *env) {
+  auto exception = std::current_exception();
+
   try {
     throw;
   } catch (const java_exception_t &error) {
     env->Throw(error);
+  } catch (const std::invalid_argument &error) {
+    java_throw_native_exception(env, "java/lang/IllegalArgumentException", error.what(), exception);
+  } catch (const std::out_of_range &error) {
+    java_throw_native_exception(env, "java/lang/IndexOutOfBoundsException", error.what(), exception);
+  } catch (const std::bad_alloc &error) {
+    java_throw_native_exception(env, "java/lang/OutOfMemoryError", error.what(), exception);
   } catch (const std::exception &error) {
-    java_throw_runtime_exception(env, error.what());
+    java_throw_native_exception(env, "java/lang/RuntimeException", error.what(), exception);
   } catch (...) {
-    java_throw_runtime_exception(env, "Unknown native exception");
+    java_throw_native_exception(env, "java/lang/RuntimeException", "Unknown native exception", exception);
   }
 }
 

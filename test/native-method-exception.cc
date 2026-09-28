@@ -4,9 +4,21 @@
 #include <stdlib.h>
 #include <string.h>
 
+struct test_error : std::runtime_error {
+  test_error() : std::runtime_error("thrown from native") {}
+};
+
+static const test_error *thrown = nullptr;
+
 static void
 thrower(java_env_t env, java_object_t<"Thrower"> receiver) {
-  throw std::invalid_argument("thrown from native");
+  try {
+    throw test_error();
+  } catch (const test_error &error) {
+    thrown = &error;
+
+    throw;
+  }
 }
 
 int
@@ -17,21 +29,28 @@ main() {
 
   auto [vm, env] = java_vm_t::create(std::vector<std::string>{std::string("-Djava.class.path=") + class_path});
 
+  JNIEnv *jenv = env;
+
   auto thrower_class = java_class_t<"Thrower">(env);
 
   thrower_class.register_natives(java_native_method_t<thrower>("thrower"));
 
-  auto call = thrower_class.get_static_method<void()>("thrower");
+  auto propagate = thrower_class.get_static_method<void()>("propagate");
 
   bool caught = false;
 
   try {
-    call();
-  } catch (const java_exception_t &error) {
+    propagate();
+  } catch (const test_error &error) {
     caught = true;
 
-    assert(strstr(error.what(), "thrown from native") != nullptr);
+    assert(&error == thrown);
   }
 
   assert(caught);
+  assert(jenv->ExceptionCheck() == JNI_FALSE);
+
+  auto caught_by_java = thrower_class.get_static_method<std::string()>("caught");
+
+  assert(caught_by_java() == "java.lang.RuntimeException: thrown from native");
 }

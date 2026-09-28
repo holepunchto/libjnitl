@@ -13,6 +13,20 @@ public class Thrower {
     throw new IllegalStateException();
   }
 
+  public static void propagate() {
+    thrower();
+  }
+
+  public static String caught() {
+    try {
+      thrower();
+    } catch (Throwable e) {
+      return e.getClass().getName() + ": " + e.getMessage();
+    }
+
+    return null;
+  }
+
   public static boolean roundTrip() {
     try {
       rethrower();
