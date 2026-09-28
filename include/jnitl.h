@@ -1362,6 +1362,23 @@ struct java_type_info_t<java_object_t<N>> {
   }
 };
 
+template <>
+struct java_type_info_t<java_string_t> {
+  using type = jobject;
+
+  static constexpr java_string_literal_t signature = "Ljava/lang/String;";
+
+  static auto
+  marshall(JNIEnv *env, const java_string_t &value) {
+    return static_cast<jobject>(value);
+  }
+
+  static auto
+  unmarshall(JNIEnv *env, const jobject &value) {
+    return java_string_t(env, value);
+  }
+};
+
 template <java_class_name_t N, typename T>
 struct java_type_info_t<java_class_t<N, T>> {
   using type = jobject;
@@ -1387,6 +1404,23 @@ struct java_type_info_t<R(void)> {
 template <typename R, typename... A>
 struct java_type_info_t<R(A...)> {
   static constexpr java_string_literal_t signature = "(" + (java_string_literal_t("") + ... + java_type_info_t<A>::signature) + ")" + java_type_info_t<R>::signature;
+};
+
+template <>
+struct java_type_info_t<java_byte_buffer_t> {
+  using type = jobject;
+
+  static constexpr java_string_literal_t signature = "Ljava/nio/ByteBuffer;";
+
+  static auto
+  marshall(JNIEnv *env, const java_byte_buffer_t &value) {
+    return static_cast<jobject>(value);
+  }
+
+  static auto
+  unmarshall(JNIEnv *env, const jobject &value) {
+    return java_byte_buffer_t(env, value);
+  }
 };
 
 template <typename T>
@@ -2121,7 +2155,7 @@ struct java_method_invoker_t<short(A...)> {
     return result;
   }
 
-  static char
+  static short
   call(JNIEnv *env, jclass receiver, jmethodID method, A... args) {
     jvalue argv[] = {
       java_marshall_argument_value(env, std::move(args))...
