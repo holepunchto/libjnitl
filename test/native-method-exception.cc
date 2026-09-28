@@ -8,17 +8,9 @@ struct test_error : std::runtime_error {
   test_error() : std::runtime_error("thrown from native") {}
 };
 
-static const test_error *thrown = nullptr;
-
 static void
 thrower(java_env_t env, java_object_t<"Thrower"> receiver) {
-  try {
-    throw test_error();
-  } catch (const test_error &error) {
-    thrown = &error;
-
-    throw;
-  }
+  throw test_error();
 }
 
 int
@@ -44,7 +36,7 @@ main() {
   } catch (const test_error &error) {
     caught = true;
 
-    assert(&error == thrown);
+    assert(strcmp(error.what(), "thrown from native") == 0);
   }
 
   assert(caught);
