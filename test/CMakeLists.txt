@@ -11,6 +11,8 @@ list(APPEND tests
   exception-thread
   native-method
   native-method-exception
+  native-method-exception-cleanup
+  native-method-exception-mapping
   native-method-lookup-exception
   native-method-round-trip
   null-string
