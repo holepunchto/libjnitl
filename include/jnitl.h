@@ -1920,7 +1920,7 @@ struct java_method_invoker_t<short(A...)> {
     return env->CallShortMethodA(receiver, method, argv);
   }
 
-  static char
+  static short
   call(JNIEnv *env, jclass receiver, jmethodID method, A... args) {
     jvalue argv[] = {
       java_marshall_argument_value(env, std::move(args))...

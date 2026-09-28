@@ -7,6 +7,7 @@ list(APPEND tests
   class-loader
   native-method
   null-string
+  static-method-short
 )
 
 # Windows links against jvm.dll, which sits in a JDK subdirectory that is not
