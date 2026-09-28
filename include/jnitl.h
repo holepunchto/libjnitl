@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <memory>
 #include <optional>
 #include <span>
 #include <stdexcept>
@@ -266,63 +267,42 @@ struct java_weak_global_ref_t : T {
   }
 };
 
-struct java_string_t : java_object_t<"java/lang/String"> {
-  java_string_t() : java_object_t(), utf8_(nullptr) {}
+using java_throwable_t = java_object_t<"java/lang/Throwable">;
 
-  java_string_t(JNIEnv *env, jobject handle) : java_object_t(env, handle), utf8_(nullptr) {}
-
-  java_string_t(JNIEnv *env, const char *value) : java_string_t(env, env->NewStringUTF(value)) {}
-
-  java_string_t(JNIEnv *env, const std::string &value) : java_string_t(env, value.c_str()) {}
-
-  java_string_t(java_string_t &&that) {
-    swap(that);
-  }
-
-  java_string_t(const java_string_t &that) : java_object_t(that), utf8_(nullptr) {}
-
-  ~java_string_t() {
-    if (utf8_) env_->ReleaseStringUTFChars(reinterpret_cast<jstring>(handle_), utf8_);
-  }
-
-  java_string_t &
-  operator=(java_string_t that) {
-    swap(that);
-
-    return *this;
-  }
-
-  operator jstring() const {
-    return reinterpret_cast<jstring>(handle_);
-  }
-
-  operator const char *() const {
-    if (utf8_ == nullptr) utf8_ = env_->GetStringUTFChars(reinterpret_cast<jstring>(handle_), nullptr);
-
-    return utf8_;
-  }
-
-  operator std::string() const {
-    return static_cast<const char *>(*this);
+struct java_global_ref_deleter_t {
+  java_global_ref_deleter_t(JNIEnv *env) {
+    env->GetJavaVM(&vm_);
   }
 
   void
-  swap(java_string_t &that) {
-    java_object_t::swap(that);
+  operator()(jobject handle) const {
+    int err;
 
-    std::swap(utf8_, that.utf8_);
-  }
+    JNIEnv *env;
+    err = vm_->GetEnv(reinterpret_cast<void **>(&env), JNI_VERSION_1_6);
 
-  auto
-  c_str() const {
-    return static_cast<const char *>(*this);
+    if (err == JNI_OK) {
+      env->DeleteGlobalRef(handle);
+
+      return;
+    }
+
+#if defined(__ANDROID__)
+    err = vm_->AttachCurrentThread(&env, nullptr);
+#else
+    err = vm_->AttachCurrentThread(reinterpret_cast<void **>(&env), nullptr);
+#endif
+
+    if (err != JNI_OK) return;
+
+    env->DeleteGlobalRef(handle);
+
+    vm_->DetachCurrentThread();
   }
 
 private:
-  mutable const char *utf8_;
+  JavaVM *vm_;
 };
-
-using java_throwable_t = java_object_t<"java/lang/Throwable">;
 
 static inline std::string
 java_describe_throwable(JNIEnv *env, jthrowable error) {
@@ -332,44 +312,52 @@ java_describe_throwable(JNIEnv *env, jthrowable error) {
 
   env->DeleteLocalRef(clazz);
 
-  if (id == nullptr) {
+  if (env->ExceptionCheck()) {
     env->ExceptionClear();
 
     return "Unknown Java exception";
   }
 
-  auto handle = env->CallObjectMethod(error, id);
+  auto handle = reinterpret_cast<jstring>(env->CallObjectMethod(error, id));
 
-  if (handle == nullptr) {
+  if (env->ExceptionCheck()) {
     env->ExceptionClear();
 
     return "Unknown Java exception";
   }
 
-  auto description = static_cast<std::string>(java_string_t(env, handle));
+  if (handle == nullptr) return "Unknown Java exception";
+
+  auto chars = env->GetStringUTFChars(handle, nullptr);
+
+  if (chars == nullptr) {
+    env->ExceptionClear();
+
+    env->DeleteLocalRef(handle);
+
+    return "Unknown Java exception";
+  }
+
+  std::string description(chars);
+
+  env->ReleaseStringUTFChars(handle, chars);
 
   env->DeleteLocalRef(handle);
 
   return description;
 }
 
-struct java_exception_t : std::exception {
+struct java_exception_t : std::runtime_error {
   java_exception_t(JNIEnv *env, jthrowable error)
-      : error_(env, error),
-        description_(java_describe_throwable(env, error)) {}
+      : std::runtime_error(java_describe_throwable(env, error)),
+        error_(env->NewGlobalRef(error), java_global_ref_deleter_t(env)) {}
 
   operator jthrowable() const {
-    return reinterpret_cast<jthrowable>(static_cast<jobject>(error_));
-  }
-
-  const char *
-  what() const noexcept override {
-    return description_.c_str();
+    return reinterpret_cast<jthrowable>(error_.get());
   }
 
 private:
-  java_global_ref_t<java_throwable_t> error_;
-  std::string description_;
+  std::shared_ptr<std::remove_pointer_t<jobject>> error_;
 };
 
 static inline void
@@ -385,6 +373,14 @@ java_check_exception(JNIEnv *env) {
   env->DeleteLocalRef(error);
 
   throw exception;
+}
+
+template <typename T>
+static inline T
+java_check_exception(JNIEnv *env, T result) {
+  java_check_exception(env);
+
+  return result;
 }
 
 static inline void
@@ -411,6 +407,62 @@ java_throw_exception(JNIEnv *env) {
   }
 }
 
+struct java_string_t : java_object_t<"java/lang/String"> {
+  java_string_t() : java_object_t(), utf8_(nullptr) {}
+
+  java_string_t(JNIEnv *env, jobject handle) : java_object_t(env, handle), utf8_(nullptr) {}
+
+  java_string_t(JNIEnv *env, const char *value) : java_string_t(env, java_check_exception(env, env->NewStringUTF(value))) {}
+
+  java_string_t(JNIEnv *env, const std::string &value) : java_string_t(env, value.c_str()) {}
+
+  java_string_t(java_string_t &&that) {
+    swap(that);
+  }
+
+  java_string_t(const java_string_t &that) : java_object_t(that), utf8_(nullptr) {}
+
+  ~java_string_t() {
+    if (utf8_) env_->ReleaseStringUTFChars(reinterpret_cast<jstring>(handle_), utf8_);
+  }
+
+  java_string_t &
+  operator=(java_string_t that) {
+    swap(that);
+
+    return *this;
+  }
+
+  operator jstring() const {
+    return reinterpret_cast<jstring>(handle_);
+  }
+
+  operator const char *() const {
+    if (utf8_ == nullptr) utf8_ = java_check_exception(env_, env_->GetStringUTFChars(reinterpret_cast<jstring>(handle_), nullptr));
+
+    return utf8_;
+  }
+
+  operator std::string() const {
+    return static_cast<const char *>(*this);
+  }
+
+  void
+  swap(java_string_t &that) {
+    java_object_t::swap(that);
+
+    std::swap(utf8_, that.utf8_);
+  }
+
+  auto
+  c_str() const {
+    return static_cast<const char *>(*this);
+  }
+
+private:
+  mutable const char *utf8_;
+};
+
 template <typename T, typename U>
 struct java_primitive_array_t : java_object_t<"java/lang/Object"> {
   static constexpr size_t npos = -1;
@@ -436,7 +488,7 @@ struct java_primitive_array_t : java_object_t<"java/lang/Object"> {
   operator=(const java_primitive_array_t &) = delete;
 
   operator T *() const {
-    if (elements_ == nullptr) elements_ = get_elements();
+    if (elements_ == nullptr) elements_ = java_check_exception(env_, get_elements());
 
     return reinterpret_cast<T *>(elements_);
   }
@@ -478,11 +530,15 @@ struct java_primitive_array_t : java_object_t<"java/lang/Object"> {
   void
   copy_to(std::span<T> dest, size_t start = 0) const {
     get_region(start, dest.size(), reinterpret_cast<U *>(dest.data()));
+
+    java_check_exception(env_);
   }
 
   void
   copy_from(std::span<const T> src, size_t start = 0) {
     set_region(start, src.size(), reinterpret_cast<const U *>(src.data()));
+
+    java_check_exception(env_);
   }
 
   auto
@@ -521,7 +577,7 @@ struct java_array_t<bool> : java_primitive_array_t<bool, jboolean> {
 
   java_array_t(JNIEnv *env, jobject handle) : java_primitive_array_t(env, handle) {}
 
-  java_array_t(JNIEnv *env, int len) : java_array_t(env, env->NewBooleanArray(len)) {}
+  java_array_t(JNIEnv *env, int len) : java_array_t(env, java_check_exception(env, env->NewBooleanArray(len))) {}
 
   java_array_t(java_array_t &&that) {
     swap(that);
@@ -572,7 +628,7 @@ struct java_array_t<unsigned char> : java_primitive_array_t<unsigned char, jbyte
 
   java_array_t(JNIEnv *env, jobject handle) : java_primitive_array_t(env, handle) {}
 
-  java_array_t(JNIEnv *env, int len) : java_array_t(env, env->NewByteArray(len)) {}
+  java_array_t(JNIEnv *env, int len) : java_array_t(env, java_check_exception(env, env->NewByteArray(len))) {}
 
   java_array_t(java_array_t &&that) {
     swap(that);
@@ -623,7 +679,7 @@ struct java_array_t<char> : java_primitive_array_t<char, jchar> {
 
   java_array_t(JNIEnv *env, jobject handle) : java_primitive_array_t(env, handle) {}
 
-  java_array_t(JNIEnv *env, int len) : java_array_t(env, env->NewCharArray(len)) {}
+  java_array_t(JNIEnv *env, int len) : java_array_t(env, java_check_exception(env, env->NewCharArray(len))) {}
 
   java_array_t(java_array_t &&that) {
     swap(that);
@@ -674,7 +730,7 @@ struct java_array_t<short> : java_primitive_array_t<short, jshort> {
 
   java_array_t(JNIEnv *env, jobject handle) : java_primitive_array_t(env, handle) {}
 
-  java_array_t(JNIEnv *env, int len) : java_array_t(env, env->NewShortArray(len)) {}
+  java_array_t(JNIEnv *env, int len) : java_array_t(env, java_check_exception(env, env->NewShortArray(len))) {}
 
   java_array_t(java_array_t &&that) {
     swap(that);
@@ -725,7 +781,7 @@ struct java_array_t<int> : java_primitive_array_t<int, jint> {
 
   java_array_t(JNIEnv *env, jobject handle) : java_primitive_array_t(env, handle) {}
 
-  java_array_t(JNIEnv *env, int len) : java_array_t(env, env->NewIntArray(len)) {}
+  java_array_t(JNIEnv *env, int len) : java_array_t(env, java_check_exception(env, env->NewIntArray(len))) {}
 
   java_array_t(java_array_t &&that) {
     swap(that);
@@ -776,7 +832,7 @@ struct java_array_t<long> : java_primitive_array_t<long, jlong> {
 
   java_array_t(JNIEnv *env, jobject handle) : java_primitive_array_t(env, handle) {}
 
-  java_array_t(JNIEnv *env, int len) : java_array_t(env, env->NewLongArray(len)) {}
+  java_array_t(JNIEnv *env, int len) : java_array_t(env, java_check_exception(env, env->NewLongArray(len))) {}
 
   java_array_t(java_array_t &&that) {
     swap(that);
@@ -827,7 +883,7 @@ struct java_array_t<float> : java_primitive_array_t<float, jfloat> {
 
   java_array_t(JNIEnv *env, jobject handle) : java_primitive_array_t(env, handle) {}
 
-  java_array_t(JNIEnv *env, int len) : java_array_t(env, env->NewFloatArray(len)) {}
+  java_array_t(JNIEnv *env, int len) : java_array_t(env, java_check_exception(env, env->NewFloatArray(len))) {}
 
   java_array_t(java_array_t &&that) {
     swap(that);
@@ -878,7 +934,7 @@ struct java_array_t<double> : java_primitive_array_t<double, jdouble> {
 
   java_array_t(JNIEnv *env, jobject handle) : java_primitive_array_t(env, handle) {}
 
-  java_array_t(JNIEnv *env, int len) : java_array_t(env, env->NewDoubleArray(len)) {}
+  java_array_t(JNIEnv *env, int len) : java_array_t(env, java_check_exception(env, env->NewDoubleArray(len))) {}
 
   java_array_t(java_array_t &&that) {
     swap(that);
@@ -930,7 +986,7 @@ struct java_array_t : java_object_t<"java/lang/Object"> {
   java_array_t(JNIEnv *env, jobjectArray handle) : java_object_t(env, handle) {}
 
   java_array_t(JNIEnv *env, int len, jclass type, jobject initial)
-      : java_array_t(env, env->NewObjectArray(len, type, initial)) {}
+      : java_array_t(env, java_check_exception(env, env->NewObjectArray(len, type, initial))) {}
 
   java_array_t(JNIEnv *env, int len, jclass type)
       : java_array_t(env, len, type, nullptr) {}
@@ -959,12 +1015,14 @@ struct java_array_t : java_object_t<"java/lang/Object"> {
 
   auto
   get(int i) const {
-    return java_unmarshall_value<T>(env_, env_->GetObjectArrayElement(*this, i));
+    return java_unmarshall_value<T>(env_, java_check_exception(env_, env_->GetObjectArrayElement(*this, i)));
   }
 
   void
   set(int i, T value) const {
     env_->SetObjectArrayElement(*this, i, java_marshall_value(env_, value));
+
+    java_check_exception(env_);
   }
 };
 
@@ -977,7 +1035,7 @@ struct java_byte_buffer_t : java_object_t<"java/nio/ByteBuffer"> {
         size_(env->GetDirectBufferCapacity(handle)) {}
 
   java_byte_buffer_t(JNIEnv *env, uint8_t *data, size_t len)
-      : java_byte_buffer_t(env, env->NewDirectByteBuffer(data, len)) {}
+      : java_byte_buffer_t(env, java_check_exception(env, env->NewDirectByteBuffer(data, len))) {}
 
   java_byte_buffer_t(java_byte_buffer_t &&that) {
     swap(that);
@@ -1324,7 +1382,7 @@ struct java_type_info_t<const char *> {
 
   static auto
   marshall(JNIEnv *env, const char *value) {
-    return env->NewStringUTF(value);
+    return java_check_exception(env, env->NewStringUTF(value));
   }
 };
 
@@ -1336,14 +1394,14 @@ struct java_type_info_t<std::string> {
 
   static auto
   marshall(JNIEnv *env, const std::string &value) {
-    return env->NewStringUTF(value.c_str());
+    return java_check_exception(env, env->NewStringUTF(value.c_str()));
   }
 
   static auto
   unmarshall(JNIEnv *env, const jobject &value) {
     if (value == nullptr) throw std::invalid_argument("Could not unmarshall null as a string");
 
-    auto chars = env->GetStringUTFChars(reinterpret_cast<jstring>(value), nullptr);
+    auto chars = java_check_exception(env, env->GetStringUTFChars(reinterpret_cast<jstring>(value), nullptr));
 
     std::string result(chars);
 
@@ -2313,13 +2371,7 @@ struct java_class_t : java_object_t<"java/lang/Class"> {
   java_class_t(JNIEnv *env, jobject clazz) : java_object_t(env, clazz) {}
 
   java_class_t(JNIEnv *env) : java_object_t(env, nullptr) {
-    handle_ = env_->FindClass(N);
-
-    if (handle_ == nullptr) {
-      env_->ExceptionClear();
-
-      throw std::invalid_argument("Could not find class with name '" + std::string(name) + "'");
-    }
+    handle_ = java_check_exception(env_, env_->FindClass(N));
   }
 
   java_class_t(java_class_t &&that) {
@@ -2361,11 +2413,7 @@ struct java_class_t : java_object_t<"java/lang/Class"> {
 
     auto id = env_->GetFieldID(jclass(handle_), name, signature);
 
-    if (id == nullptr) {
-      throw std::invalid_argument(
-        "Could not find field '" + std::string(name) + "' with signature '" + std::string(signature) + "'"
-      );
-    }
+    java_check_exception(env_);
 
     return java_field_t<N, U>(java_field_base_t(env_, jclass(handle_), id));
   }
@@ -2383,11 +2431,7 @@ struct java_class_t : java_object_t<"java/lang/Class"> {
 
     auto id = env_->GetStaticFieldID(jclass(handle_), name, signature);
 
-    if (id == nullptr) {
-      throw std::invalid_argument(
-        "Could not find field '" + std::string(name) + "' with signature '" + std::string(signature) + "'"
-      );
-    }
+    java_check_exception(env_);
 
     return java_static_field_t<N, U>(java_field_base_t(env_, jclass(handle_), id));
   }
@@ -2405,11 +2449,7 @@ struct java_class_t : java_object_t<"java/lang/Class"> {
 
     auto id = env_->GetMethodID(jclass(handle_), name, signature);
 
-    if (id == nullptr) {
-      throw std::invalid_argument(
-        "Could not find method '" + std::string(name) + "' with signature '" + std::string(signature) + "'"
-      );
-    }
+    java_check_exception(env_);
 
     return java_method_t<N, U>(java_method_base_t(env_, jclass(handle_), id));
   }
@@ -2427,11 +2467,7 @@ struct java_class_t : java_object_t<"java/lang/Class"> {
 
     auto id = env_->GetStaticMethodID(jclass(handle_), name, signature);
 
-    if (id == nullptr) {
-      throw std::invalid_argument(
-        "Could not find method '" + std::string(name) + "' with signature '" + std::string(signature) + "'"
-      );
-    }
+    java_check_exception(env_);
 
     return java_static_method_t<U>(java_method_base_t(env_, jclass(handle_), id));
   }
@@ -2470,6 +2506,8 @@ struct java_class_t : java_object_t<"java/lang/Class"> {
   void
   register_natives(M... methods) {
     env_->RegisterNatives(jclass(handle_), (JNINativeMethod[]) {methods...}, sizeof...(M));
+
+    java_check_exception(env_);
   }
 
   void

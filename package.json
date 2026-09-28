@@ -13,6 +13,6 @@
   "homepage": "https://github.com/holepunchto/libjnitl#readme",
   "devDependencies": {
     "cmake-fetch": "^1.4.1",
-    "cmake-java": "^0.1.1"
+    "cmake-java": "^0.1.2"
   }
 }
