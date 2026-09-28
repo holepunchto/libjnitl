@@ -5,10 +5,21 @@ endif()
 list(APPEND tests
   basic
   class-loader
+  exception
+  exception-inspect
+  exception-lookup
+  exception-thread
   native-method
+  native-method-exception
+  native-method-lookup-exception
+  native-method-round-trip
   null-string
   static-method-short
 )
+
+add_jar(fixtures SOURCES Hello.java Thrower.java)
+
+get_target_property(fixtures_jar fixtures JAR_FILE)
 
 # Windows links against jvm.dll, which sits in a JDK subdirectory that is not
 # searched by default.
@@ -49,6 +60,8 @@ foreach(test IN LISTS tests)
       JNI::JVM
   )
 
+  add_dependencies(${test} fixtures)
+
   add_test(
     NAME ${test}
     COMMAND ${test}
@@ -59,6 +72,7 @@ foreach(test IN LISTS tests)
     ${test}
     PROPERTIES
     TIMEOUT 30
+    ENVIRONMENT "TEST_CLASS_PATH=${fixtures_jar}"
   )
 
   if(WIN32)
@@ -69,4 +83,3 @@ foreach(test IN LISTS tests)
     )
   endif()
 endforeach()
-
