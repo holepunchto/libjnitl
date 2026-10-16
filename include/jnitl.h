@@ -1973,6 +1973,29 @@ struct java_field_accessor_t<long> {
 };
 
 template <>
+struct java_field_accessor_t<long long> {
+  static auto
+  get(JNIEnv *env, jobject receiver, jfieldID field) {
+    return env->GetLongField(receiver, field);
+  }
+
+  static auto
+  get(JNIEnv *env, jclass receiver, jfieldID field) {
+    return env->GetStaticLongField(receiver, field);
+  }
+
+  static void
+  set(JNIEnv *env, jobject receiver, jfieldID field, jlong value) {
+    env->SetLongField(receiver, field, value);
+  }
+
+  static void
+  set(JNIEnv *env, jclass receiver, jfieldID field, jlong value) {
+    env->SetStaticLongField(receiver, field, value);
+  }
+};
+
+template <>
 struct java_field_accessor_t<float> {
   static auto
   get(JNIEnv *env, jobject receiver, jfieldID field) {
@@ -2295,6 +2318,35 @@ struct java_method_invoker_t<long(A...)> {
   }
 
   static long
+  call(JNIEnv *env, jclass receiver, jmethodID method, A... args) {
+    jvalue argv[] = {
+      java_marshall_argument_value(env, std::move(args))...
+    };
+
+    auto result = env->CallStaticLongMethodA(receiver, method, argv);
+
+    java_check_exception(env);
+
+    return result;
+  }
+};
+
+template <typename... A>
+struct java_method_invoker_t<long long(A...)> {
+  static long long
+  call(JNIEnv *env, jobject receiver, jmethodID method, A... args) {
+    jvalue argv[] = {
+      java_marshall_argument_value(env, std::move(args))...
+    };
+
+    auto result = env->CallLongMethodA(receiver, method, argv);
+
+    java_check_exception(env);
+
+    return result;
+  }
+
+  static long long
   call(JNIEnv *env, jclass receiver, jmethodID method, A... args) {
     jvalue argv[] = {
       java_marshall_argument_value(env, std::move(args))...
