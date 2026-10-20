@@ -14,6 +14,8 @@
 
 #include <jni.h>
 
+#pragma GCC visibility push(hidden)
+
 template <typename A, typename B>
 constexpr bool java_is_same = false;
 
@@ -2806,3 +2808,5 @@ struct java_thread_t : java_object_t<"java/lang/Thread"> {
     return java_thread_t(env, current_thread());
   }
 };
+
+#pragma GCC visibility pop
