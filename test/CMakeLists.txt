@@ -17,6 +17,7 @@ list(APPEND tests
   native-method-round-trip
   null-string
   static-method-short
+  string-nul
 )
 
 add_jar(fixtures SOURCES Hello.java Thrower.java)
