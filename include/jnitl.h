@@ -1555,6 +1555,10 @@ struct java_type_info_t<std::string> {
 
   static auto
   marshall(JNIEnv *env, const std::string &value) {
+    if (value.find('\0') != std::string::npos) {
+      throw std::invalid_argument("Could not marshall a string containing a NUL");
+    }
+
     return java_check_exception(env, env->NewStringUTF(value.c_str()));
   }
 
