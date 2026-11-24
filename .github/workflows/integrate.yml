@@ -54,7 +54,7 @@ jobs:
             arch: arm64
             tags: -simulator
             flags: --simulator
-          - os: macos-14
+          - os: macos-15
             platform: ios
             arch: x64
             tags: -simulator
